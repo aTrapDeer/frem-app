@@ -1,26 +1,262 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 255 255 255;
+  --foreground: 71 85 105;
+  --muted: 248 250 252;
+  --muted-foreground: 100 116 139;
+  --accent: 99 102 241;
+  --accent-secondary: 217 70 239;
+  --border: 148 163 184;
+  --input: 248 250 252;
+  --ring: 99 102 241;
+  --destructive: 239 68 68;
+  --success: 34 197 94;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  border-color: rgb(148 163 184);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Force override gray borders that might appear yellow */
+.border-gray-200 {
+  border-color: rgb(148 163 184) !important;
+}
+
+.border-slate-200 {
+  border-color: rgb(148 163 184) !important;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: white;
+  color: rgb(100 116 139);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+}
+
+.font-numbers {
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: rgb(248 250 252);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(203 213 225);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184);
+}
+
+/* Animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in {
+    animation: none;
+  }
+
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-transparency: reduce) {
+  .bg-white\/80 {
+    background-color: white;
+  }
+
+  .backdrop-blur-md {
+    backdrop-filter: none;
+  }
+}
+
+/* Focus styles */
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid rgb(99 102 241);
+  outline-offset: 2px;
+}
+
+/* Gradient text with fallback */
+.gradient-text {
+  background: linear-gradient(to right, rgb(99 102 241), rgb(217 70 239));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .gradient-text {
+    color: rgb(99 102 241);
+    background: none;
+  }
+}
+
+/* Button interactions */
+.btn-press {
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 75ms;
+}
+
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+/* Card hover lift */
+.card-lift {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+.card-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+.card-lift-sm {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+.card-lift-sm:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* Glass cards */
+.glass-card {
+  background-color: rgb(255 255 255 / 0.8);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  border: 1px solid rgb(226 232 240 / 0.5);
+}
+
+/* Fix yellow background on autofill inputs */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px white inset !important;
+  -webkit-text-fill-color: rgb(100 116 139) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Remove browser default focus outline and validation styling */
+input,
+select,
+textarea,
+button {
+  outline: none !important;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Override browser form validation styling */
+input:invalid,
+select:invalid,
+textarea:invalid {
+  box-shadow: none !important;
+  border-color: rgb(226 232 240) !important;
+}
+
+/* Ensure consistent input styling */
+input,
+select,
+textarea {
+  background-color: white !important;
+  color: rgb(100 116 139);
+  border-color: rgb(226 232 240) !important;
+}
+
+/* Override any browser-provided focus styling */
+input:focus,
+select:focus,
+textarea:focus,
+button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Override Chrome/Safari yellow autofill background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  border: 1px solid rgb(226 232 240) !important;
+  -webkit-text-fill-color: rgb(100 116 139) !important;
+  -webkit-box-shadow: 0 0 0px 1000px white inset !important;
+  background-color: white !important;
+  background-image: none !important;
+  color: rgb(100 116 139) !important;
+}
+
+/* Additional yellow/amber overrides */
+* {
+  --tw-ring-color: rgb(99 102 241) !important;
+  --tw-border-opacity: 1 !important;
+}
+
+/* Force override any remaining yellow/amber colors */
+.bg-yellow-50,
+.bg-amber-50,
+.border-yellow-200,
+.border-amber-200,
+.text-yellow-600,
+.text-amber-600,
+.ring-yellow-500,
+.ring-amber-500 {
+  background-color: rgb(248 250 252) !important;
+  border-color: rgb(226 232 240) !important;
+  color: rgb(100 116 139) !important;
+  --tw-ring-color: rgb(99 102 241) !important;
 }
