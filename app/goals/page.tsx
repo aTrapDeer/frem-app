@@ -12,10 +12,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { ArrowRight, ArrowLeft, Target } from "lucide-react"
+import { ArrowRight, ArrowLeft, Target, Edit, Trash2 } from "lucide-react"
 import { SideProjects } from "@/components/side-projects"
 import { useAuth } from "@/contexts/auth-context"
-import { getGoals, createGoal } from "@/lib/database"
+import { getGoals, createGoal, updateGoal, calculateDailyTarget } from "@/lib/database"
 
 const goalSchema = z.object({
   title: z.string().min(1, "Goal title is required"),
@@ -43,6 +43,7 @@ export default function GoalsPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
 
   const {
     register,
@@ -102,6 +103,13 @@ export default function GoalsPage() {
       setStep(1)
       setSuccessMessage(`Great! "${data.title}" goal has been created successfully.`)
       
+      // Refresh daily target calculations since goals affect the target
+      try {
+        await calculateDailyTarget(user.id)
+      } catch (error) {
+        console.error('Error refreshing daily target:', error)
+      }
+      
       // Clear success message after 5 seconds
       setTimeout(() => setSuccessMessage(""), 5000)
     } catch (error) {
@@ -109,6 +117,56 @@ export default function GoalsPage() {
       // You could add error state here for user feedback
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleEditGoal = async (goalId: string, updates: Partial<GoalFormData>) => {
+    if (!user) return
+    
+    try {
+      setSubmitting(true)
+      
+      const updatedGoal = await updateGoal(goalId, {
+        title: updates.title,
+        target_amount: updates.amount,
+        deadline: updates.deadline,
+        category: updates.category,
+        updated_at: new Date().toISOString()
+      })
+      
+      setGoals(prev => prev.map(goal => 
+        goal.id === goalId ? updatedGoal : goal
+      ))
+      
+      setEditingGoal(null)
+      setSuccessMessage("Goal updated successfully!")
+      
+      // Refresh daily target calculations since goal changes affect the target
+      try {
+        await calculateDailyTarget(user.id)
+      } catch (error) {
+        console.error('Error refreshing daily target:', error)
+      }
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(""), 5000)
+    } catch (error) {
+      console.error('Error updating goal:', error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDeleteGoal = async (goalId: string) => {
+    if (!user || !confirm('Are you sure you want to delete this goal?')) return
+    
+    try {
+      await updateGoal(goalId, { status: 'cancelled' })
+      setGoals(prev => prev.filter(goal => goal.id !== goalId))
+      setSuccessMessage("Goal deleted successfully!")
+      setTimeout(() => setSuccessMessage(""), 5000)
+    } catch (error) {
+      console.error('Error deleting goal:', error)
     }
   }
 
@@ -154,7 +212,13 @@ export default function GoalsPage() {
                 </div>
               ) : (
                 goals.map((goal, index) => (
-                  <GoalCard key={goal.id} goal={goal} index={index} />
+                  <GoalCard 
+                    key={goal.id} 
+                    goal={goal} 
+                    index={index}
+                    onEdit={setEditingGoal}
+                    onDelete={handleDeleteGoal}
+                  />
                 ))
               )}
             </div>
@@ -190,6 +254,16 @@ export default function GoalsPage() {
                 </form>
               </CardContent>
             </Card>
+
+            {/* Edit Goal Modal */}
+            {editingGoal && (
+              <EditGoalModal
+                goal={editingGoal}
+                onSave={handleEditGoal}
+                onCancel={() => setEditingGoal(null)}
+                submitting={submitting}
+              />
+            )}
           </div>
 
           {/* Side Projects Section */}
@@ -214,9 +288,11 @@ export default function GoalsPage() {
 interface GoalCardProps {
   goal: Goal
   index: number
+  onEdit: (goal: Goal) => void
+  onDelete: (goalId: string) => void
 }
 
-function GoalCard({ goal, index }: GoalCardProps) {
+function GoalCard({ goal, index, onEdit, onDelete }: GoalCardProps) {
   const progress = goal.target_amount > 0 ? (goal.current_amount / goal.target_amount) * 100 : 0
 
   return (
@@ -225,16 +301,36 @@ function GoalCard({ goal, index }: GoalCardProps) {
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.6, delay: index * 0.1 }}
     >
-      <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
+      <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 group">
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">{goal.title}</h3>
-              <p className="text-sm text-slate-600 capitalize">{goal.category}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold font-numbers text-slate-900">${goal.current_amount.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">of ${goal.target_amount.toLocaleString()}</p>
+            <div className="flex-1">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">{goal.title}</h3>
+                  <p className="text-sm text-slate-600 capitalize">{goal.category}</p>
+                </div>
+                <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => onEdit(goal)}
+                    className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                    title="Edit goal"
+                  >
+                    <Edit className="h-4 w-4 text-slate-600" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(goal.id)}
+                    className="p-2 rounded-lg hover:bg-red-50 transition-colors"
+                    title="Delete goal"
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </button>
+                </div>
+              </div>
+              <div className="text-right mt-2">
+                <p className="text-2xl font-bold font-numbers text-slate-900">${goal.current_amount.toLocaleString()}</p>
+                <p className="text-sm text-slate-600">of ${goal.target_amount.toLocaleString()}</p>
+              </div>
             </div>
           </div>
 
@@ -422,4 +518,138 @@ function GoalWizardStep({ step, register, errors, watchedValues, onNext, onPrev,
     default:
       return null
   }
+}
+
+interface EditGoalModalProps {
+  goal: Goal
+  onSave: (goalId: string, updates: Partial<GoalFormData>) => void
+  onCancel: () => void
+  submitting: boolean
+}
+
+function EditGoalModal({ goal, onSave, onCancel, submitting }: EditGoalModalProps) {
+  const [editData, setEditData] = useState({
+    title: goal.title,
+    amount: goal.target_amount.toString(),
+    deadline: goal.deadline,
+    category: goal.category as GoalFormData['category']
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const amount = parseFloat(editData.amount)
+    if (!editData.title || !amount || !editData.deadline || !editData.category) return
+    
+    onSave(goal.id, {
+      title: editData.title,
+      amount: amount,
+      deadline: editData.deadline,
+      category: editData.category
+    })
+  }
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 32 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 32 }}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-slate-900">Edit Goal</h2>
+            <button
+              onClick={onCancel}
+              className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="edit-title">Goal Title</Label>
+              <Input
+                id="edit-title"
+                value={editData.title}
+                onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                className="bg-white"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-amount">Target Amount</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 font-medium">$</span>
+                <Input
+                  id="edit-amount"
+                  type="number"
+                  step="0.01"
+                  value={editData.amount}
+                  onChange={(e) => setEditData({ ...editData, amount: e.target.value })}
+                  className="pl-8 bg-white"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-deadline">Target Date</Label>
+              <Input
+                id="edit-deadline"
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={editData.deadline}
+                onChange={(e) => setEditData({ ...editData, deadline: e.target.value })}
+                className="bg-white"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-category">Category</Label>
+              <select
+                id="edit-category"
+                value={editData.category}
+                onChange={(e) => setEditData({ ...editData, category: e.target.value as GoalFormData['category'] })}
+                className="w-full p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+              >
+                <option value="emergency">🛡️ Emergency Fund</option>
+                <option value="vacation">✈️ Vacation & Travel</option>
+                <option value="car">🚗 Vehicle Purchase</option>
+                <option value="house">🏠 Home & Property</option>
+                <option value="debt">💳 Debt Payoff</option>
+                <option value="investment">📈 Investment & Savings</option>
+                <option value="other">🎯 Other Goal</option>
+              </select>
+            </div>
+
+            <div className="flex space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 bg-gradient-to-r from-indigo-500 to-fuchsia-600 hover:from-indigo-600 hover:to-fuchsia-700 text-white"
+              >
+                {submitting ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
 }

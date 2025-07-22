@@ -6,11 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { useInView } from "framer-motion"
-import { Calendar, DollarSign, Target, MapPin, X } from "lucide-react"
+import { Calendar, DollarSign, Target, MapPin, X, CreditCard, TrendingUp, TrendingDown } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
-import { getMilestones, getGoals, getRecurringExpenses, getSideProjects, getTransactions } from "@/lib/database"
+import { getMilestones, getGoals, getRecurringExpenses, getSideProjects, getTransactions, calculateDailyTarget } from "@/lib/database"
 
 const BubbleMap = React.lazy(() => import("@/components/bubble-map"))
 
@@ -38,6 +38,7 @@ export default function SummaryPage() {
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [loading, setLoading] = useState(true)
   const [financialData, setFinancialData] = useState<UserFinancialData | null>(null)
+  const [targetData, setTargetData] = useState<any>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
 
@@ -50,15 +51,17 @@ export default function SummaryPage() {
         setLoading(true)
         
         // Fetch all user financial data for the journey map
-        const [milestonesData, goalsData, recurringExpensesData, sideProjectsData, recentTransactionsData] = await Promise.all([
+        const [milestonesData, goalsData, recurringExpensesData, sideProjectsData, recentTransactionsData, targetCalculation] = await Promise.all([
           getMilestones(user.id),
           getGoals(user.id),
           getRecurringExpenses(user.id),
           getSideProjects(user.id),
-          getTransactions(user.id) // Get recent transactions to estimate income
+          getTransactions(user.id), // Get recent transactions to estimate income
+          calculateDailyTarget(user.id) // Get smart target calculations
         ])
         
         setMilestones(milestonesData)
+        setTargetData(targetCalculation)
         
         // Calculate estimated monthly income from recent transactions
         const recentIncome = recentTransactionsData
@@ -111,6 +114,14 @@ export default function SummaryPage() {
           return sum + (milestone.current_amount / milestone.target_amount * 100)
         }, 0) / milestones.length 
       : 0,
+    // Financial health metrics from target calculation
+    monthlyObligations: targetData?.totalMonthlyObligations || 0,
+    monthlyIncome: targetData?.estimatedMonthlyIncome || 0,
+    dailyTarget: targetData?.dailyTarget || 0,
+    financialHealth: targetData ? (targetData.monthlySurplusDeficit >= 0 ? 'positive' : 'negative') : 'unknown',
+    surplus: targetData?.monthlySurplusDeficit || 0,
+    activeGoals: targetData?.activeGoalsCount || 0,
+    recurringExpenses: targetData?.recurringExpensesCount || 0,
   }
 
   const getCategoryColor = (category: string) => {
@@ -218,6 +229,154 @@ export default function SummaryPage() {
               </Card>
             </motion.div>
           </div>
+
+          {/* Financial KPIs */}
+          {targetData && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.4 }}
+              >
+                <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-slate-600">Monthly Income</CardTitle>
+                    <DollarSign className="h-4 w-4 text-green-600" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold font-numbers text-slate-900">${kpis.monthlyIncome.toLocaleString()}</div>
+                    <p className="text-xs text-slate-600 mt-1">
+                      From all sources
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.5 }}
+              >
+                <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-slate-600">Monthly Obligations</CardTitle>
+                    <CreditCard className="h-4 w-4 text-red-600" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold font-numbers text-slate-900">${kpis.monthlyObligations.toLocaleString()}</div>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Goals + expenses
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.6 }}
+              >
+                <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-slate-600">Monthly {kpis.surplus >= 0 ? 'Surplus' : 'Deficit'}</CardTitle>
+                    {kpis.surplus >= 0 ? <TrendingUp className="h-4 w-4 text-green-600" /> : <TrendingDown className="h-4 w-4 text-red-600" />}
+                  </CardHeader>
+                  <CardContent>
+                    <div className={`text-2xl font-bold font-numbers ${kpis.surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {kpis.surplus >= 0 ? '+' : ''}${kpis.surplus.toLocaleString()}
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1">
+                      {kpis.surplus >= 0 ? 'Extra to invest' : 'Need more income'}
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.7 }}
+              >
+                <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-slate-600">Daily Target</CardTitle>
+                    <Target className="h-4 w-4 text-indigo-600" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold font-numbers text-slate-900">${kpis.dailyTarget.toFixed(0)}</div>
+                    <p className="text-xs text-slate-600 mt-1">
+                      To stay on track
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </div>
+          )}
+
+          {/* Financial Breakdown */}
+          {targetData && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.8 }}
+              className="mb-8"
+            >
+              <Card className="bg-white border border-slate-200 shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">Smart Financial Analysis</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-medium text-slate-800 mb-3">Monthly Breakdown</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Goals ({targetData.activeGoalsCount}):</span>
+                          <span className="font-medium text-blue-600">${targetData.monthlyGoalObligations.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Recurring Expenses ({targetData.recurringExpensesCount}):</span>
+                          <span className="font-medium text-red-600">${targetData.monthlyRecurringTotal.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between pt-2 border-t border-slate-200">
+                          <span className="font-semibold text-slate-800">Total Monthly Need:</span>
+                          <span className="font-semibold text-slate-800">${targetData.totalMonthlyObligations.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-slate-800 mb-3">Income Sources</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Primary Income:</span>
+                          <span className="font-medium text-green-600">${(targetData.estimatedMonthlyIncome - targetData.monthlyProjectIncome).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Side Projects:</span>
+                          <span className="font-medium text-blue-600">${targetData.monthlyProjectIncome.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between pt-2 border-t border-slate-200">
+                          <span className="font-semibold text-slate-800">Total Monthly Income:</span>
+                          <span className="font-semibold text-slate-800">${targetData.estimatedMonthlyIncome.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {targetData.monthlySurplusDeficit !== 0 && (
+                    <div className="mt-4 p-4 rounded-lg bg-slate-50 border">
+                      <p className={`text-sm font-medium ${targetData.monthlySurplusDeficit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        {targetData.monthlySurplusDeficit >= 0 ? '💚 Financial Health: Excellent' : '⚠️ Financial Health: Needs Attention'} 
+                      </p>
+                      <p className="text-sm text-slate-600 mt-1">
+                        {targetData.monthlySurplusDeficit >= 0 
+                          ? `You have $${targetData.monthlySurplusDeficit.toLocaleString()}/month surplus. Consider increasing your goals or starting new investments.`
+                          : `You need an additional $${Math.abs(targetData.monthlySurplusDeficit).toLocaleString()}/month income to comfortably meet your current financial obligations.`
+                        }
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Bubble Map Toggle - Only show if user has data */}
           {hasFinancialData && (

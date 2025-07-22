@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/contexts/auth-context"
-import { createTransaction, getTransactions, Transaction } from "@/lib/database"
+import { createTransaction, getTransactions, Transaction, calculateDailyTarget, createTransactionWithAllocations, getGoals, getRecurringExpenses } from "@/lib/database"
 import { Plus, Minus, DollarSign, TrendingUp, Target, TrendingDown } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 
@@ -21,6 +21,13 @@ export default function DailyInterface() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [transactionsLoading, setTransactionsLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [targetData, setTargetData] = useState<any>(null)
+  const [targetLoading, setTargetLoading] = useState(true)
+  const [showAllocationModal, setShowAllocationModal] = useState(false)
+  const [pendingTransaction, setPendingTransaction] = useState<any>(null)
+  const [availableGoals, setAvailableGoals] = useState<any[]>([])
+  const [availableExpenses, setAvailableExpenses] = useState<any[]>([])
+  const [allocations, setAllocations] = useState<{ type: 'goal' | 'expense', id: string, name: string, amount: number }[]>([])
 
   // Redirect unauthenticated users
   useEffect(() => {
@@ -48,6 +55,50 @@ export default function DailyInterface() {
 
     if (user) {
       fetchTransactions()
+    }
+  }, [user])
+
+  // Fetch goals and expenses for allocation
+  useEffect(() => {
+    async function fetchAllocationOptions() {
+      if (!user) return
+      
+      try {
+        const [goals, expenses] = await Promise.all([
+          getGoals(user.id),
+          getRecurringExpenses(user.id)
+        ])
+        
+        setAvailableGoals(goals.filter(g => g.status === 'active'))
+        setAvailableExpenses(expenses.filter(e => e.status === 'active'))
+      } catch (error) {
+        console.error('Error fetching allocation options:', error)
+      }
+    }
+
+    if (user) {
+      fetchAllocationOptions()
+    }
+  }, [user])
+
+  // Fetch target calculation data
+  useEffect(() => {
+    async function fetchTargetData() {
+      if (!user) return
+      
+      try {
+        setTargetLoading(true)
+        const data = await calculateDailyTarget(user.id)
+        setTargetData(data)
+      } catch (error) {
+        console.error('Error fetching target data:', error)
+      } finally {
+        setTargetLoading(false)
+      }
+    }
+
+    if (user) {
+      fetchTargetData()
     }
   }, [user])
 
@@ -87,6 +138,16 @@ export default function DailyInterface() {
         setExpenseAmount("")
         setExpenseDescription("")
       }
+
+      // Refresh target data after adding transactions (income affects calculations)
+      if (type === "income") {
+        try {
+          const updatedTargetData = await calculateDailyTarget(user.id)
+          setTargetData(updatedTargetData)
+        } catch (error) {
+          console.error('Error refreshing target data:', error)
+        }
+      }
     } catch (error) {
       console.error('Error adding transaction:', error)
     } finally {
@@ -94,12 +155,17 @@ export default function DailyInterface() {
     }
   }
 
-  const dailyGoal = userSettings?.daily_budget_target || 150
+  const dailyGoal = targetData?.dailyTarget || userSettings?.daily_budget_target || 150
   const dailyTotal = transactions.reduce((sum, transaction) => {
     return sum + (transaction.type === 'income' ? transaction.amount : -transaction.amount)
   }, 0)
   
   const progressPercentage = Math.max(0, Math.min((dailyTotal / dailyGoal) * 100, 100))
+  
+  // Calculate how close we are to covering obligations
+  const dailyObligation = dailyGoal
+  const surplus = dailyTotal - dailyObligation
+  const isOnTrack = surplus >= 0
 
   return (
     <div className="bg-white min-h-screen">
@@ -115,7 +181,7 @@ export default function DailyInterface() {
 
           {/* Daily Summary */}
           <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-8 rounded-3xl mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div className="text-center">
                 <div className="w-16 h-16 bg-gradient-to-r from-indigo-400 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <DollarSign className="h-8 w-8 text-white" />
@@ -125,13 +191,57 @@ export default function DailyInterface() {
               </div>
 
               <div className="text-center">
-                <div className="w-16 h-16 bg-gradient-to-r from-orange-400 to-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <div className={`w-16 h-16 bg-gradient-to-r ${isOnTrack ? 'from-green-400 to-emerald-500' : 'from-orange-400 to-red-500'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
                   <Target className="h-8 w-8 text-white" />
                 </div>
-                <p className="text-3xl font-bold text-gray-800">${dailyGoal}</p>
-                <p className="text-gray-600">Daily Goal</p>
+                <p className="text-3xl font-bold text-gray-800">${dailyGoal.toFixed(2)}</p>
+                <p className="text-gray-600">Daily Target</p>
+              </div>
+
+              <div className="text-center">
+                <div className={`w-16 h-16 bg-gradient-to-r ${surplus >= 0 ? 'from-green-400 to-emerald-500' : 'from-red-400 to-pink-500'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
+                  {surplus >= 0 ? <TrendingUp className="h-8 w-8 text-white" /> : <TrendingDown className="h-8 w-8 text-white" />}
+                </div>
+                <p className={`text-3xl font-bold ${surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {surplus >= 0 ? '+' : ''}${surplus.toFixed(2)}
+                </p>
+                <p className="text-gray-600">{surplus >= 0 ? 'Surplus' : 'Deficit'}</p>
               </div>
             </div>
+
+            {/* Target Breakdown */}
+            {targetData && !targetLoading && (
+              <div className="mb-6 p-4 bg-slate-50 rounded-lg">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Daily Target Breakdown</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Goals ({targetData.activeGoalsCount}):</span>
+                    <span className="font-medium text-blue-600">${(targetData.monthlyGoalObligations / 30.44).toFixed(2)}/day</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Expenses ({targetData.recurringExpensesCount}):</span>
+                    <span className="font-medium text-red-600">${(targetData.monthlyRecurringTotal / 30.44).toFixed(2)}/day</span>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-200">
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span className="text-slate-900">Total Daily Need:</span>
+                    <span className="text-slate-900">${targetData.dailyTarget.toFixed(2)}</span>
+                  </div>
+                  {targetData.dailySurplusDeficit !== 0 && (
+                    <div className="mt-2 text-xs">
+                      <span className={`${targetData.dailySurplusDeficit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {targetData.dailySurplusDeficit >= 0 ? '💚' : '⚠️'} 
+                        {targetData.dailySurplusDeficit >= 0 
+                          ? ` You're on track! ${targetData.dailySurplusDeficit.toFixed(2)}/day surplus expected`
+                          : ` Need ${Math.abs(targetData.dailySurplusDeficit).toFixed(2)}/day more income to meet goals`
+                        }
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Progress Bar */}
             <div className="space-y-2">

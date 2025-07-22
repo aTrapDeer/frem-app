@@ -347,3 +347,153 @@ export const getDashboardData = async (userId: string) => {
     activeSideProjectsCount: activeSideProjects.length
   }
 } 
+
+// Transaction Allocation Functions
+export const createTransactionWithAllocations = async (
+  transaction: Database['public']['Tables']['daily_transactions']['Insert'],
+  allocations?: { type: 'goal' | 'expense', id: string, amount: number, notes?: string }[]
+) => {
+  // Create the transaction first
+  const newTransaction = await createTransaction(transaction)
+  
+  if (allocations && allocations.length > 0) {
+    // Create allocation records
+    for (const allocation of allocations) {
+      await supabase
+        .from('transaction_allocations')
+        .insert({
+          transaction_id: newTransaction.id,
+          user_id: transaction.user_id,
+          allocation_type: allocation.type,
+          target_id: allocation.id,
+          allocated_amount: allocation.amount,
+          notes: allocation.notes
+        })
+    }
+  }
+  
+  return newTransaction
+}
+
+export const getTransactionAllocations = async (transactionId: string) => {
+  const { data, error } = await supabase
+    .from('transaction_allocations')
+    .select('*')
+    .eq('transaction_id', transactionId)
+
+  if (error) {
+    console.error('Error fetching allocations:', error.message)
+    throw error
+  }
+
+  return data
+}
+
+export const getAllocatedAmountForTarget = async (userId: string, targetType: 'goal' | 'expense', targetId: string) => {
+  const { data, error } = await supabase
+    .from('transaction_allocations')
+    .select('allocated_amount')
+    .eq('user_id', userId)
+    .eq('allocation_type', targetType)
+    .eq('target_id', targetId)
+
+  if (error) {
+    console.error('Error fetching allocated amount:', error.message)
+    throw error
+  }
+
+  return data.reduce((sum, allocation) => sum + allocation.allocated_amount, 0)
+}
+
+// Calculate smart daily target based on goals and recurring expenses
+export const calculateDailyTarget = async (userId: string) => {
+  try {
+    // Get active goals and calculate monthly obligations
+    const goals = await getGoals(userId)
+    const activeGoals = goals.filter(goal => goal.status === 'active')
+    
+    const monthlyGoalObligations = activeGoals.reduce((sum, goal) => {
+      const today = new Date()
+      const deadline = new Date(goal.deadline)
+      const monthsLeft = Math.max(1, Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44))) // 30.44 days per month average
+      
+      const remainingAmount = goal.target_amount - goal.current_amount
+      const monthlyRequired = remainingAmount / monthsLeft
+      
+      return sum + Math.max(0, monthlyRequired) // Don't count negative (already exceeded goals)
+    }, 0)
+    
+    // Get recurring expenses
+    const recurringExpenses = await getRecurringExpenses(userId)
+    const monthlyRecurringTotal = recurringExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+    
+    // Total monthly obligations
+    const totalMonthlyObligations = monthlyGoalObligations + monthlyRecurringTotal
+    
+    // Convert to daily target (divide by 30.44)
+    const dailyTarget = totalMonthlyObligations / 30.44
+    
+    // Get available monthly income (from side projects + estimate from recent transactions)
+    const sideProjects = await getSideProjects(userId)
+    const activeSideProjects = sideProjects.filter(project => project.status === 'active')
+    const monthlyProjectIncome = activeSideProjects.reduce((sum, project) => sum + project.current_monthly_earnings, 0)
+    
+    // Get recent transactions for more accurate income estimation
+    const recentTransactions = await getTransactions(userId)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    
+    // Only use transactions from last 30 days for monthly estimation
+    const recentIncomeTransactions = recentTransactions.filter(t => 
+      t.type === 'income' && new Date(t.created_at) >= thirtyDaysAgo
+    )
+    
+    // Separate one-time events from recurring income
+    const recurringIncome = recentIncomeTransactions.filter(t => 
+      t.category === 'salary' || t.category === 'freelance' || t.category === 'business'
+    )
+    
+    const oneTimeIncome = recentIncomeTransactions.filter(t => 
+      t.category === 'investment' || t.category === 'bonus' || t.category === 'gift' || t.category === 'other'
+    )
+    
+    // Only estimate monthly income from recurring sources
+    const recurringMonthlyIncome = recurringIncome.length > 0 
+      ? (recurringIncome.reduce((sum, t) => sum + t.amount, 0) / recurringIncome.length) * 4.33 // weeks to month
+      : 0
+    
+    // Add side project income 
+    const estimatedMonthlyIncome = recurringMonthlyIncome + monthlyProjectIncome
+    
+    // Calculate surplus/deficit
+    const monthlySurplusDeficit = estimatedMonthlyIncome - totalMonthlyObligations
+    const dailySurplusDeficit = monthlySurplusDeficit / 30.44
+    
+    return {
+      dailyTarget: Math.round(dailyTarget * 100) / 100,
+      monthlyGoalObligations: Math.round(monthlyGoalObligations * 100) / 100,
+      monthlyRecurringTotal: Math.round(monthlyRecurringTotal * 100) / 100,
+      totalMonthlyObligations: Math.round(totalMonthlyObligations * 100) / 100,
+      estimatedMonthlyIncome: Math.round(estimatedMonthlyIncome * 100) / 100,
+      monthlyProjectIncome: Math.round(monthlyProjectIncome * 100) / 100,
+      monthlySurplusDeficit: Math.round(monthlySurplusDeficit * 100) / 100,
+      dailySurplusDeficit: Math.round(dailySurplusDeficit * 100) / 100,
+      activeGoalsCount: activeGoals.length,
+      recurringExpensesCount: recurringExpenses.length
+    }
+  } catch (error) {
+    console.error('Error calculating daily target:', error)
+    return {
+      dailyTarget: 150, // Fallback to default
+      monthlyGoalObligations: 0,
+      monthlyRecurringTotal: 0,
+      totalMonthlyObligations: 0,
+      estimatedMonthlyIncome: 0,
+      monthlyProjectIncome: 0,
+      monthlySurplusDeficit: 0,
+      dailySurplusDeficit: 0,
+      activeGoalsCount: 0,
+      recurringExpensesCount: 0
+    }
+  }
+} 

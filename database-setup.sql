@@ -101,3 +101,32 @@ END $$;
 
 -- Add some helpful comments
 COMMENT ON FUNCTION public.handle_new_user() IS 'Automatically creates user profile and settings when a new user signs up via Supabase Auth'; 
+
+-- Transaction Allocations Table
+-- Tracks how income transactions are allocated to specific goals or recurring expenses
+CREATE TABLE transaction_allocations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id UUID REFERENCES daily_transactions(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    allocation_type VARCHAR(20) NOT NULL CHECK (allocation_type IN ('goal', 'expense', 'general')),
+    target_id UUID, -- References financial_goals.id or recurring_expenses.id
+    allocated_amount DECIMAL(10,2) NOT NULL CHECK (allocated_amount > 0),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for transaction_allocations
+CREATE INDEX idx_transaction_allocations_transaction ON transaction_allocations(transaction_id);
+CREATE INDEX idx_transaction_allocations_user ON transaction_allocations(user_id);
+CREATE INDEX idx_transaction_allocations_type ON transaction_allocations(allocation_type);
+CREATE INDEX idx_transaction_allocations_target ON transaction_allocations(target_id);
+
+-- RLS for transaction_allocations
+ALTER TABLE transaction_allocations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can only access their own allocations" ON transaction_allocations
+    FOR ALL USING (user_id = auth.uid());
+
+-- Updated at trigger for transaction_allocations
+CREATE TRIGGER update_transaction_allocations_updated_at BEFORE UPDATE ON transaction_allocations
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column(); 
