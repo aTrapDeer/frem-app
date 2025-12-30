@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { signInWithGoogle } from "@/lib/auth"
+import { useAuth } from "@/contexts/auth-context"
 import { X, Mail, Lock, ArrowRight } from "lucide-react"
 
 interface LoginModalProps {
@@ -15,6 +15,7 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose }: LoginModalProps) {
+  const { signInWithGoogle } = useAuth()
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
@@ -88,7 +89,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement email/password authentication with Supabase
+    // TODO: Implement email/password authentication with NextAuth credentials provider
     console.log('Email auth not implemented yet')
   }
 
@@ -331,4 +332,4 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       )}
     </AnimatePresence>
   )
-} 
+}

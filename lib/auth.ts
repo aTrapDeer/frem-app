@@ -1,130 +1,28 @@
-import { supabase } from './supabase'
-import { Database } from './supabase'
+// Re-export auth functions from the main auth config
+// This file maintains backward compatibility with existing imports
 
-export type User = Database['public']['Tables']['users']['Row']
-export type UserSettings = Database['public']['Tables']['user_settings']['Row']
+export { signIn, signOut, auth } from '@/auth'
 
-// Authentication functions
+// Helper function for client-side Google sign in
 export const signInWithGoogle = async () => {
-  console.log('🔐 signInWithGoogle called')
-  console.log('🌐 Current origin:', window.location.origin)
-  console.log('🔄 Redirect URL will be:', `${window.location.origin}/auth/callback`)
-
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback`
-    }
-  })
-  
-  console.log('📤 OAuth response:', { data, error })
-  
-  if (error) {
-    console.error('❌ Error signing in with Google:', error.message)
-    throw error
-  }
-  
-  console.log('✅ Google OAuth initiated successfully')
-  return data
+  const { signIn } = await import('next-auth/react')
+  return signIn('google', { callbackUrl: '/dashboard' })
 }
 
-export const signOut = async () => {
-  const { error } = await supabase.auth.signOut()
-  if (error) {
-    console.error('Error signing out:', error.message)
-    throw error
-  }
+// Helper function for client-side sign out
+export const signOutUser = async () => {
+  const { signOut } = await import('next-auth/react')
+  return signOut({ callbackUrl: '/' })
 }
 
-export const getCurrentUser = async () => {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  
-  if (error) {
-    console.error('Error getting current user:', error.message)
-    return null
-  }
-  
-  return user
-}
-
+// Get current session (server-side)
 export const getSession = async () => {
-  const { data: { session }, error } = await supabase.auth.getSession()
-  
-  if (error) {
-    console.error('Error getting session:', error.message)
-    return null
-  }
-  
-  return session
+  const { auth } = await import('@/auth')
+  return auth()
 }
 
-// User profile functions - read-only operations
-export const getUserProfile = async (userId: string): Promise<User | null> => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', userId)
-    .single()
-
-  if (error) {
-    if (error.code === 'PGRST116') {
-      // User not found, return null
-      return null
-    }
-    console.error('Error getting user profile:', error.message, error.code)
-    throw error
-  }
-
-  return data
+// Get current user (server-side)
+export const getCurrentUser = async () => {
+  const session = await getSession()
+  return session?.user ?? null
 }
-
-export const getUserSettings = async (userId: string): Promise<UserSettings | null> => {
-  const { data, error } = await supabase
-    .from('user_settings')
-    .select('*')
-    .eq('user_id', userId)
-    .single()
-
-  if (error) {
-    if (error.code === 'PGRST116') {
-      // Settings not found, return null
-      return null
-    }
-    console.error('Error getting user settings:', error.message, error.code)
-    throw error
-  }
-
-  return data
-}
-
-export const updateUserProfile = async (userId: string, updates: Partial<User>) => {
-  const { data, error } = await supabase
-    .from('users')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', userId)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating user profile:', error.message)
-    throw error
-  }
-
-  return data
-}
-
-export const updateUserSettings = async (userId: string, updates: Partial<UserSettings>) => {
-  const { data, error } = await supabase
-    .from('user_settings')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating user settings:', error.message)
-    throw error
-  }
-
-  return data
-} 

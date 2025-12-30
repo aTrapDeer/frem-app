@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter, DM_Sans } from "next/font/google"
 import "./globals.css"
+import { SessionProvider } from '@/components/session-provider'
 import { AuthProvider } from '@/contexts/auth-context'
 
 const inter = Inter({
@@ -53,9 +54,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${dmSans.variable}`}>
       <body className={`${inter.className} antialiased`}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <SessionProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </SessionProvider>
       </body>
     </html>
   )

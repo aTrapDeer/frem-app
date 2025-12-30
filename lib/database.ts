@@ -1,317 +1,780 @@
-import { supabase } from './supabase'
-import { Database } from './supabase'
+import { turso, generateUUID, getCurrentTimestamp, getCurrentDate } from './turso'
 
-export type Transaction = Database['public']['Tables']['daily_transactions']['Row']
-export type Goal = Database['public']['Tables']['financial_goals']['Row']
-export type RecurringExpense = Database['public']['Tables']['recurring_expenses']['Row']
-export type SideProject = Database['public']['Tables']['side_projects']['Row']
-export type Milestone = Database['public']['Tables']['financial_milestones']['Row']
+// Type definitions
+export type Transaction = {
+  id: string
+  user_id: string
+  type: 'income' | 'expense'
+  amount: number
+  description: string
+  category: string | null
+  transaction_date: string
+  transaction_time: string
+  created_at: string
+  updated_at: string
+}
 
-// Daily Transactions
-export const createTransaction = async (transaction: Database['public']['Tables']['daily_transactions']['Insert']) => {
-  const { data, error } = await supabase
-    .from('daily_transactions')
-    .insert(transaction)
-    .select()
-    .single()
+export type Goal = {
+  id: string
+  user_id: string
+  title: string
+  description: string | null
+  target_amount: number
+  current_amount: number
+  category: 'emergency' | 'vacation' | 'car' | 'house' | 'debt' | 'investment' | 'other'
+  deadline: string
+  priority: 'low' | 'medium' | 'high'
+  status: 'active' | 'completed' | 'paused' | 'cancelled'
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+}
 
-  if (error) {
-    console.error('Error creating transaction:', error.message)
-    throw error
+export type RecurringExpense = {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  amount: number
+  category: 'housing' | 'utilities' | 'entertainment' | 'health' | 'transportation' | 'food' | 'subscriptions' | 'insurance' | 'other'
+  due_date: number
+  status: 'active' | 'paused' | 'cancelled'
+  auto_pay: boolean
+  reminder_enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type SideProject = {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  category: string | null
+  status: 'planning' | 'active' | 'paused' | 'completed' | 'cancelled'
+  current_monthly_earnings: number
+  projected_monthly_earnings: number
+  time_invested_weekly: number
+  start_date: string | null
+  end_date: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type Milestone = {
+  id: string
+  user_id: string
+  title: string
+  description: string | null
+  target_amount: number | null
+  current_amount: number
+  category: 'security' | 'debt' | 'lifestyle' | 'transportation' | 'growth' | 'investment' | 'other'
+  priority: 'low' | 'medium' | 'high'
+  status: 'planned' | 'in-progress' | 'completed' | 'cancelled'
+  impact_level: 'low' | 'medium' | 'high'
+  deadline: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type UserSettings = {
+  id: string
+  user_id: string
+  daily_budget_target: number
+  currency: string
+  preferred_language: string
+  notifications_enabled: boolean
+  dark_mode: boolean
+  weekly_summary_email: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Helper to convert row to typed object
+function rowToTransaction(row: Record<string, unknown>): Transaction {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    type: row.type as 'income' | 'expense',
+    amount: row.amount as number,
+    description: row.description as string,
+    category: row.category as string | null,
+    transaction_date: row.transaction_date as string,
+    transaction_time: row.transaction_time as string,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
   }
+}
 
-  return data
+function rowToGoal(row: Record<string, unknown>): Goal {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    title: row.title as string,
+    description: row.description as string | null,
+    target_amount: row.target_amount as number,
+    current_amount: row.current_amount as number,
+    category: row.category as Goal['category'],
+    deadline: row.deadline as string,
+    priority: row.priority as Goal['priority'],
+    status: row.status as Goal['status'],
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+    completed_at: row.completed_at as string | null,
+  }
+}
+
+function rowToRecurringExpense(row: Record<string, unknown>): RecurringExpense {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    name: row.name as string,
+    description: row.description as string | null,
+    amount: row.amount as number,
+    category: row.category as RecurringExpense['category'],
+    due_date: row.due_date as number,
+    status: row.status as RecurringExpense['status'],
+    auto_pay: Boolean(row.auto_pay),
+    reminder_enabled: Boolean(row.reminder_enabled),
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  }
+}
+
+function rowToSideProject(row: Record<string, unknown>): SideProject {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    name: row.name as string,
+    description: row.description as string | null,
+    category: row.category as string | null,
+    status: row.status as SideProject['status'],
+    current_monthly_earnings: row.current_monthly_earnings as number,
+    projected_monthly_earnings: row.projected_monthly_earnings as number,
+    time_invested_weekly: row.time_invested_weekly as number,
+    start_date: row.start_date as string | null,
+    end_date: row.end_date as string | null,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  }
+}
+
+function rowToMilestone(row: Record<string, unknown>): Milestone {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    title: row.title as string,
+    description: row.description as string | null,
+    target_amount: row.target_amount as number | null,
+    current_amount: row.current_amount as number,
+    category: row.category as Milestone['category'],
+    priority: row.priority as Milestone['priority'],
+    status: row.status as Milestone['status'],
+    impact_level: row.impact_level as Milestone['impact_level'],
+    deadline: row.deadline as string | null,
+    completed_at: row.completed_at as string | null,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  }
+}
+
+function rowToUserSettings(row: Record<string, unknown>): UserSettings {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    daily_budget_target: row.daily_budget_target as number,
+    currency: row.currency as string,
+    preferred_language: row.preferred_language as string,
+    notifications_enabled: Boolean(row.notifications_enabled),
+    dark_mode: Boolean(row.dark_mode),
+    weekly_summary_email: Boolean(row.weekly_summary_email),
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  }
+}
+
+// =============================================
+// User Settings
+// =============================================
+
+export const getUserSettings = async (userId: string): Promise<UserSettings | null> => {
+  const result = await turso.execute({
+    sql: 'SELECT * FROM user_settings WHERE user_id = ?',
+    args: [userId]
+  })
+  
+  if (!result.rows[0]) return null
+  return rowToUserSettings(result.rows[0] as Record<string, unknown>)
+}
+
+export const updateUserSettings = async (userId: string, updates: Partial<UserSettings>): Promise<UserSettings> => {
+  const now = getCurrentTimestamp()
+  const fields: string[] = ['updated_at = ?']
+  const args: (string | number | boolean | null)[] = [now]
+  
+  if (updates.daily_budget_target !== undefined) {
+    fields.push('daily_budget_target = ?')
+    args.push(updates.daily_budget_target)
+  }
+  if (updates.currency !== undefined) {
+    fields.push('currency = ?')
+    args.push(updates.currency)
+  }
+  if (updates.notifications_enabled !== undefined) {
+    fields.push('notifications_enabled = ?')
+    args.push(updates.notifications_enabled ? 1 : 0)
+  }
+  if (updates.dark_mode !== undefined) {
+    fields.push('dark_mode = ?')
+    args.push(updates.dark_mode ? 1 : 0)
+  }
+  
+  args.push(userId)
+  
+  await turso.execute({
+    sql: `UPDATE user_settings SET ${fields.join(', ')} WHERE user_id = ?`,
+    args
+  })
+  
+  const result = await getUserSettings(userId)
+  if (!result) throw new Error('Failed to update user settings')
+  return result
+}
+
+// =============================================
+// Daily Transactions
+// =============================================
+
+export const createTransaction = async (transaction: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>): Promise<Transaction> => {
+  const id = generateUUID()
+  const now = getCurrentTimestamp()
+  const today = getCurrentDate()
+  
+  await turso.execute({
+    sql: `INSERT INTO daily_transactions (id, user_id, type, amount, description, category, transaction_date, transaction_time, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      transaction.user_id,
+      transaction.type,
+      transaction.amount,
+      transaction.description,
+      transaction.category ?? null,
+      transaction.transaction_date ?? today,
+      transaction.transaction_time ?? now,
+      now,
+      now
+    ]
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM daily_transactions WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToTransaction(result.rows[0] as Record<string, unknown>)
 }
 
 export const getTransactions = async (userId: string, date?: string): Promise<Transaction[]> => {
-  let query = supabase
-    .from('daily_transactions')
-    .select('*')
-    .eq('user_id', userId)
-    .order('transaction_time', { ascending: false })
-
+  let sql = 'SELECT * FROM daily_transactions WHERE user_id = ?'
+  const args: string[] = [userId]
+  
   if (date) {
-    query = query.eq('transaction_date', date)
+    sql += ' AND transaction_date = ?'
+    args.push(date)
   }
-
-  const { data, error } = await query
-
-  if (error) {
-    console.error('Error fetching transactions:', error.message)
-    throw error
-  }
-
-  return data || []
+  
+  sql += ' ORDER BY transaction_time DESC'
+  
+  const result = await turso.execute({ sql, args })
+  return result.rows.map(row => rowToTransaction(row as Record<string, unknown>))
 }
 
-export const updateTransaction = async (id: string, updates: Database['public']['Tables']['daily_transactions']['Update']) => {
-  const { data, error } = await supabase
-    .from('daily_transactions')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating transaction:', error.message)
-    throw error
+export const updateTransaction = async (id: string, updates: Partial<Transaction>): Promise<Transaction> => {
+  const now = getCurrentTimestamp()
+  const fields: string[] = ['updated_at = ?']
+  const args: (string | number | null)[] = [now]
+  
+  if (updates.type !== undefined) {
+    fields.push('type = ?')
+    args.push(updates.type)
   }
-
-  return data
+  if (updates.amount !== undefined) {
+    fields.push('amount = ?')
+    args.push(updates.amount)
+  }
+  if (updates.description !== undefined) {
+    fields.push('description = ?')
+    args.push(updates.description)
+  }
+  if (updates.category !== undefined) {
+    fields.push('category = ?')
+    args.push(updates.category)
+  }
+  
+  args.push(id)
+  
+  await turso.execute({
+    sql: `UPDATE daily_transactions SET ${fields.join(', ')} WHERE id = ?`,
+    args
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM daily_transactions WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToTransaction(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteTransaction = async (id: string) => {
-  const { error } = await supabase
-    .from('daily_transactions')
-    .delete()
-    .eq('id', id)
-
-  if (error) {
-    console.error('Error deleting transaction:', error.message)
-    throw error
-  }
+export const deleteTransaction = async (id: string): Promise<void> => {
+  await turso.execute({
+    sql: 'DELETE FROM daily_transactions WHERE id = ?',
+    args: [id]
+  })
 }
 
+// =============================================
 // Financial Goals
-export const createGoal = async (goal: Database['public']['Tables']['financial_goals']['Insert']) => {
-  const { data, error } = await supabase
-    .from('financial_goals')
-    .insert(goal)
-    .select()
-    .single()
+// =============================================
 
-  if (error) {
-    console.error('Error creating goal:', error.message)
-    throw error
-  }
-
-  return data
+export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated_at' | 'completed_at'>): Promise<Goal> => {
+  const id = generateUUID()
+  const now = getCurrentTimestamp()
+  
+  await turso.execute({
+    sql: `INSERT INTO financial_goals (id, user_id, title, description, target_amount, current_amount, category, deadline, priority, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      goal.user_id,
+      goal.title,
+      goal.description ?? null,
+      goal.target_amount,
+      goal.current_amount ?? 0,
+      goal.category,
+      goal.deadline,
+      goal.priority ?? 'medium',
+      goal.status ?? 'active',
+      now,
+      now
+    ]
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM financial_goals WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToGoal(result.rows[0] as Record<string, unknown>)
 }
 
 export const getGoals = async (userId: string): Promise<Goal[]> => {
-  const { data, error } = await supabase
-    .from('financial_goals')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching goals:', error.message)
-    throw error
-  }
-
-  return data || []
+  const result = await turso.execute({
+    sql: 'SELECT * FROM financial_goals WHERE user_id = ? ORDER BY created_at DESC',
+    args: [userId]
+  })
+  
+  return result.rows.map(row => rowToGoal(row as Record<string, unknown>))
 }
 
-export const updateGoal = async (id: string, updates: Database['public']['Tables']['financial_goals']['Update']) => {
-  const { data, error } = await supabase
-    .from('financial_goals')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating goal:', error.message)
-    throw error
+export const updateGoal = async (id: string, updates: Partial<Goal>): Promise<Goal> => {
+  const now = getCurrentTimestamp()
+  const fields: string[] = ['updated_at = ?']
+  const args: (string | number | null)[] = [now]
+  
+  if (updates.title !== undefined) {
+    fields.push('title = ?')
+    args.push(updates.title)
   }
-
-  return data
+  if (updates.description !== undefined) {
+    fields.push('description = ?')
+    args.push(updates.description)
+  }
+  if (updates.target_amount !== undefined) {
+    fields.push('target_amount = ?')
+    args.push(updates.target_amount)
+  }
+  if (updates.current_amount !== undefined) {
+    fields.push('current_amount = ?')
+    args.push(updates.current_amount)
+  }
+  if (updates.category !== undefined) {
+    fields.push('category = ?')
+    args.push(updates.category)
+  }
+  if (updates.deadline !== undefined) {
+    fields.push('deadline = ?')
+    args.push(updates.deadline)
+  }
+  if (updates.priority !== undefined) {
+    fields.push('priority = ?')
+    args.push(updates.priority)
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?')
+    args.push(updates.status)
+    if (updates.status === 'completed') {
+      fields.push('completed_at = ?')
+      args.push(now)
+    }
+  }
+  
+  args.push(id)
+  
+  await turso.execute({
+    sql: `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = ?`,
+    args
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM financial_goals WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToGoal(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteGoal = async (id: string) => {
-  const { error } = await supabase
-    .from('financial_goals')
-    .delete()
-    .eq('id', id)
-
-  if (error) {
-    console.error('Error deleting goal:', error.message)
-    throw error
-  }
+export const deleteGoal = async (id: string): Promise<void> => {
+  await turso.execute({
+    sql: 'DELETE FROM financial_goals WHERE id = ?',
+    args: [id]
+  })
 }
 
+// =============================================
 // Recurring Expenses
-export const createRecurringExpense = async (expense: Database['public']['Tables']['recurring_expenses']['Insert']) => {
-  const { data, error } = await supabase
-    .from('recurring_expenses')
-    .insert(expense)
-    .select()
-    .single()
+// =============================================
 
-  if (error) {
-    console.error('Error creating recurring expense:', error.message)
-    throw error
-  }
-
-  return data
+export const createRecurringExpense = async (expense: Omit<RecurringExpense, 'id' | 'created_at' | 'updated_at'>): Promise<RecurringExpense> => {
+  const id = generateUUID()
+  const now = getCurrentTimestamp()
+  
+  await turso.execute({
+    sql: `INSERT INTO recurring_expenses (id, user_id, name, description, amount, category, due_date, status, auto_pay, reminder_enabled, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      expense.user_id,
+      expense.name,
+      expense.description ?? null,
+      expense.amount,
+      expense.category,
+      expense.due_date,
+      expense.status ?? 'active',
+      expense.auto_pay ? 1 : 0,
+      expense.reminder_enabled !== false ? 1 : 0,
+      now,
+      now
+    ]
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM recurring_expenses WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToRecurringExpense(result.rows[0] as Record<string, unknown>)
 }
 
 export const getRecurringExpenses = async (userId: string): Promise<RecurringExpense[]> => {
-  const { data, error } = await supabase
-    .from('recurring_expenses')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .order('due_date', { ascending: true })
-
-  if (error) {
-    console.error('Error fetching recurring expenses:', error.message)
-    throw error
-  }
-
-  return data || []
+  const result = await turso.execute({
+    sql: 'SELECT * FROM recurring_expenses WHERE user_id = ? AND status = ? ORDER BY due_date ASC',
+    args: [userId, 'active']
+  })
+  
+  return result.rows.map(row => rowToRecurringExpense(row as Record<string, unknown>))
 }
 
-export const updateRecurringExpense = async (id: string, updates: Database['public']['Tables']['recurring_expenses']['Update']) => {
-  const { data, error } = await supabase
-    .from('recurring_expenses')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating recurring expense:', error.message)
-    throw error
+export const updateRecurringExpense = async (id: string, updates: Partial<RecurringExpense>): Promise<RecurringExpense> => {
+  const now = getCurrentTimestamp()
+  const fields: string[] = ['updated_at = ?']
+  const args: (string | number | null)[] = [now]
+  
+  if (updates.name !== undefined) {
+    fields.push('name = ?')
+    args.push(updates.name)
   }
-
-  return data
+  if (updates.description !== undefined) {
+    fields.push('description = ?')
+    args.push(updates.description)
+  }
+  if (updates.amount !== undefined) {
+    fields.push('amount = ?')
+    args.push(updates.amount)
+  }
+  if (updates.category !== undefined) {
+    fields.push('category = ?')
+    args.push(updates.category)
+  }
+  if (updates.due_date !== undefined) {
+    fields.push('due_date = ?')
+    args.push(updates.due_date)
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?')
+    args.push(updates.status)
+  }
+  if (updates.auto_pay !== undefined) {
+    fields.push('auto_pay = ?')
+    args.push(updates.auto_pay ? 1 : 0)
+  }
+  if (updates.reminder_enabled !== undefined) {
+    fields.push('reminder_enabled = ?')
+    args.push(updates.reminder_enabled ? 1 : 0)
+  }
+  
+  args.push(id)
+  
+  await turso.execute({
+    sql: `UPDATE recurring_expenses SET ${fields.join(', ')} WHERE id = ?`,
+    args
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM recurring_expenses WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToRecurringExpense(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteRecurringExpense = async (id: string) => {
-  const { error } = await supabase
-    .from('recurring_expenses')
-    .delete()
-    .eq('id', id)
-
-  if (error) {
-    console.error('Error deleting recurring expense:', error.message)
-    throw error
-  }
+export const deleteRecurringExpense = async (id: string): Promise<void> => {
+  await turso.execute({
+    sql: 'DELETE FROM recurring_expenses WHERE id = ?',
+    args: [id]
+  })
 }
 
+// =============================================
 // Side Projects
-export const createSideProject = async (project: Database['public']['Tables']['side_projects']['Insert']) => {
-  const { data, error } = await supabase
-    .from('side_projects')
-    .insert(project)
-    .select()
-    .single()
+// =============================================
 
-  if (error) {
-    console.error('Error creating side project:', error.message)
-    throw error
-  }
-
-  return data
+export const createSideProject = async (project: Omit<SideProject, 'id' | 'created_at' | 'updated_at'>): Promise<SideProject> => {
+  const id = generateUUID()
+  const now = getCurrentTimestamp()
+  
+  await turso.execute({
+    sql: `INSERT INTO side_projects (id, user_id, name, description, category, status, current_monthly_earnings, projected_monthly_earnings, time_invested_weekly, start_date, end_date, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      project.user_id,
+      project.name,
+      project.description ?? null,
+      project.category ?? null,
+      project.status ?? 'planning',
+      project.current_monthly_earnings ?? 0,
+      project.projected_monthly_earnings ?? 0,
+      project.time_invested_weekly ?? 0,
+      project.start_date ?? null,
+      project.end_date ?? null,
+      now,
+      now
+    ]
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM side_projects WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToSideProject(result.rows[0] as Record<string, unknown>)
 }
 
 export const getSideProjects = async (userId: string): Promise<SideProject[]> => {
-  const { data, error } = await supabase
-    .from('side_projects')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching side projects:', error.message)
-    throw error
-  }
-
-  return data || []
+  const result = await turso.execute({
+    sql: 'SELECT * FROM side_projects WHERE user_id = ? ORDER BY created_at DESC',
+    args: [userId]
+  })
+  
+  return result.rows.map(row => rowToSideProject(row as Record<string, unknown>))
 }
 
-export const updateSideProject = async (id: string, updates: Database['public']['Tables']['side_projects']['Update']) => {
-  const { data, error } = await supabase
-    .from('side_projects')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating side project:', error.message)
-    throw error
+export const updateSideProject = async (id: string, updates: Partial<SideProject>): Promise<SideProject> => {
+  const now = getCurrentTimestamp()
+  const fields: string[] = ['updated_at = ?']
+  const args: (string | number | null)[] = [now]
+  
+  if (updates.name !== undefined) {
+    fields.push('name = ?')
+    args.push(updates.name)
   }
-
-  return data
+  if (updates.description !== undefined) {
+    fields.push('description = ?')
+    args.push(updates.description)
+  }
+  if (updates.category !== undefined) {
+    fields.push('category = ?')
+    args.push(updates.category)
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?')
+    args.push(updates.status)
+  }
+  if (updates.current_monthly_earnings !== undefined) {
+    fields.push('current_monthly_earnings = ?')
+    args.push(updates.current_monthly_earnings)
+  }
+  if (updates.projected_monthly_earnings !== undefined) {
+    fields.push('projected_monthly_earnings = ?')
+    args.push(updates.projected_monthly_earnings)
+  }
+  if (updates.time_invested_weekly !== undefined) {
+    fields.push('time_invested_weekly = ?')
+    args.push(updates.time_invested_weekly)
+  }
+  if (updates.start_date !== undefined) {
+    fields.push('start_date = ?')
+    args.push(updates.start_date)
+  }
+  if (updates.end_date !== undefined) {
+    fields.push('end_date = ?')
+    args.push(updates.end_date)
+  }
+  
+  args.push(id)
+  
+  await turso.execute({
+    sql: `UPDATE side_projects SET ${fields.join(', ')} WHERE id = ?`,
+    args
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM side_projects WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToSideProject(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteSideProject = async (id: string) => {
-  const { error } = await supabase
-    .from('side_projects')
-    .delete()
-    .eq('id', id)
-
-  if (error) {
-    console.error('Error deleting side project:', error.message)
-    throw error
-  }
+export const deleteSideProject = async (id: string): Promise<void> => {
+  await turso.execute({
+    sql: 'DELETE FROM side_projects WHERE id = ?',
+    args: [id]
+  })
 }
 
+// =============================================
 // Financial Milestones
-export const createMilestone = async (milestone: Database['public']['Tables']['financial_milestones']['Insert']) => {
-  const { data, error } = await supabase
-    .from('financial_milestones')
-    .insert(milestone)
-    .select()
-    .single()
+// =============================================
 
-  if (error) {
-    console.error('Error creating milestone:', error.message)
-    throw error
-  }
-
-  return data
+export const createMilestone = async (milestone: Omit<Milestone, 'id' | 'created_at' | 'updated_at' | 'completed_at'>): Promise<Milestone> => {
+  const id = generateUUID()
+  const now = getCurrentTimestamp()
+  
+  await turso.execute({
+    sql: `INSERT INTO financial_milestones (id, user_id, title, description, target_amount, current_amount, category, priority, status, impact_level, deadline, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      milestone.user_id,
+      milestone.title,
+      milestone.description ?? null,
+      milestone.target_amount ?? null,
+      milestone.current_amount ?? 0,
+      milestone.category,
+      milestone.priority ?? 'medium',
+      milestone.status ?? 'planned',
+      milestone.impact_level ?? 'medium',
+      milestone.deadline ?? null,
+      now,
+      now
+    ]
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM financial_milestones WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToMilestone(result.rows[0] as Record<string, unknown>)
 }
 
 export const getMilestones = async (userId: string): Promise<Milestone[]> => {
-  const { data, error } = await supabase
-    .from('financial_milestones')
-    .select('*')
-    .eq('user_id', userId)
-    .order('deadline', { ascending: true })
-
-  if (error) {
-    console.error('Error fetching milestones:', error.message)
-    throw error
-  }
-
-  return data || []
+  const result = await turso.execute({
+    sql: 'SELECT * FROM financial_milestones WHERE user_id = ? ORDER BY deadline ASC',
+    args: [userId]
+  })
+  
+  return result.rows.map(row => rowToMilestone(row as Record<string, unknown>))
 }
 
-export const updateMilestone = async (id: string, updates: Database['public']['Tables']['financial_milestones']['Update']) => {
-  const { data, error } = await supabase
-    .from('financial_milestones')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating milestone:', error.message)
-    throw error
+export const updateMilestone = async (id: string, updates: Partial<Milestone>): Promise<Milestone> => {
+  const now = getCurrentTimestamp()
+  const fields: string[] = ['updated_at = ?']
+  const args: (string | number | null)[] = [now]
+  
+  if (updates.title !== undefined) {
+    fields.push('title = ?')
+    args.push(updates.title)
   }
-
-  return data
+  if (updates.description !== undefined) {
+    fields.push('description = ?')
+    args.push(updates.description)
+  }
+  if (updates.target_amount !== undefined) {
+    fields.push('target_amount = ?')
+    args.push(updates.target_amount)
+  }
+  if (updates.current_amount !== undefined) {
+    fields.push('current_amount = ?')
+    args.push(updates.current_amount)
+  }
+  if (updates.category !== undefined) {
+    fields.push('category = ?')
+    args.push(updates.category)
+  }
+  if (updates.priority !== undefined) {
+    fields.push('priority = ?')
+    args.push(updates.priority)
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?')
+    args.push(updates.status)
+    if (updates.status === 'completed') {
+      fields.push('completed_at = ?')
+      args.push(now)
+    }
+  }
+  if (updates.impact_level !== undefined) {
+    fields.push('impact_level = ?')
+    args.push(updates.impact_level)
+  }
+  if (updates.deadline !== undefined) {
+    fields.push('deadline = ?')
+    args.push(updates.deadline)
+  }
+  
+  args.push(id)
+  
+  await turso.execute({
+    sql: `UPDATE financial_milestones SET ${fields.join(', ')} WHERE id = ?`,
+    args
+  })
+  
+  const result = await turso.execute({
+    sql: 'SELECT * FROM financial_milestones WHERE id = ?',
+    args: [id]
+  })
+  
+  return rowToMilestone(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteMilestone = async (id: string) => {
-  const { error } = await supabase
-    .from('financial_milestones')
-    .delete()
-    .eq('id', id)
-
-  if (error) {
-    console.error('Error deleting milestone:', error.message)
-    throw error
-  }
+export const deleteMilestone = async (id: string): Promise<void> => {
+  await turso.execute({
+    sql: 'DELETE FROM financial_milestones WHERE id = ?',
+    args: [id]
+  })
 }
 
+// =============================================
 // Dashboard Analytics
+// =============================================
+
 export const getDashboardData = async (userId: string) => {
-  const today = new Date().toISOString().split('T')[0]
+  const today = getCurrentDate()
   
   // Get today's transactions
   const todayTransactions = await getTransactions(userId, today)
@@ -346,66 +809,12 @@ export const getDashboardData = async (userId: string) => {
     activeGoalsCount: activeGoals.length,
     activeSideProjectsCount: activeSideProjects.length
   }
-} 
-
-// Transaction Allocation Functions
-export const createTransactionWithAllocations = async (
-  transaction: Database['public']['Tables']['daily_transactions']['Insert'],
-  allocations?: { type: 'goal' | 'expense', id: string, amount: number, notes?: string }[]
-) => {
-  // Create the transaction first
-  const newTransaction = await createTransaction(transaction)
-  
-  if (allocations && allocations.length > 0) {
-    // Create allocation records
-    for (const allocation of allocations) {
-      await supabase
-        .from('transaction_allocations')
-        .insert({
-          transaction_id: newTransaction.id,
-          user_id: transaction.user_id,
-          allocation_type: allocation.type,
-          target_id: allocation.id,
-          allocated_amount: allocation.amount,
-          notes: allocation.notes
-        })
-    }
-  }
-  
-  return newTransaction
 }
 
-export const getTransactionAllocations = async (transactionId: string) => {
-  const { data, error } = await supabase
-    .from('transaction_allocations')
-    .select('*')
-    .eq('transaction_id', transactionId)
+// =============================================
+// Calculate Daily Target
+// =============================================
 
-  if (error) {
-    console.error('Error fetching allocations:', error.message)
-    throw error
-  }
-
-  return data
-}
-
-export const getAllocatedAmountForTarget = async (userId: string, targetType: 'goal' | 'expense', targetId: string) => {
-  const { data, error } = await supabase
-    .from('transaction_allocations')
-    .select('allocated_amount')
-    .eq('user_id', userId)
-    .eq('allocation_type', targetType)
-    .eq('target_id', targetId)
-
-  if (error) {
-    console.error('Error fetching allocated amount:', error.message)
-    throw error
-  }
-
-  return data.reduce((sum, allocation) => sum + allocation.allocated_amount, 0)
-}
-
-// Calculate smart daily target based on goals and recurring expenses
 export const calculateDailyTarget = async (userId: string) => {
   try {
     // Get active goals and calculate monthly obligations
@@ -415,12 +824,12 @@ export const calculateDailyTarget = async (userId: string) => {
     const monthlyGoalObligations = activeGoals.reduce((sum, goal) => {
       const today = new Date()
       const deadline = new Date(goal.deadline)
-      const monthsLeft = Math.max(1, Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44))) // 30.44 days per month average
+      const monthsLeft = Math.max(1, Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
       
       const remainingAmount = goal.target_amount - goal.current_amount
       const monthlyRequired = remainingAmount / monthsLeft
       
-      return sum + Math.max(0, monthlyRequired) // Don't count negative (already exceeded goals)
+      return sum + Math.max(0, monthlyRequired)
     }, 0)
     
     // Get recurring expenses
@@ -430,42 +839,33 @@ export const calculateDailyTarget = async (userId: string) => {
     // Total monthly obligations
     const totalMonthlyObligations = monthlyGoalObligations + monthlyRecurringTotal
     
-    // Convert to daily target (divide by 30.44)
+    // Convert to daily target
     const dailyTarget = totalMonthlyObligations / 30.44
     
-    // Get available monthly income (from side projects + estimate from recent transactions)
+    // Get side projects income
     const sideProjects = await getSideProjects(userId)
     const activeSideProjects = sideProjects.filter(project => project.status === 'active')
     const monthlyProjectIncome = activeSideProjects.reduce((sum, project) => sum + project.current_monthly_earnings, 0)
     
-    // Get recent transactions for more accurate income estimation
+    // Get recent transactions for income estimation
     const recentTransactions = await getTransactions(userId)
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
     
-    // Only use transactions from last 30 days for monthly estimation
     const recentIncomeTransactions = recentTransactions.filter(t => 
       t.type === 'income' && new Date(t.created_at) >= thirtyDaysAgo
     )
     
-    // Separate one-time events from recurring income
     const recurringIncome = recentIncomeTransactions.filter(t => 
       t.category === 'salary' || t.category === 'freelance' || t.category === 'business'
     )
     
-    const oneTimeIncome = recentIncomeTransactions.filter(t => 
-      t.category === 'investment' || t.category === 'bonus' || t.category === 'gift' || t.category === 'other'
-    )
-    
-    // Only estimate monthly income from recurring sources
     const recurringMonthlyIncome = recurringIncome.length > 0 
-      ? (recurringIncome.reduce((sum, t) => sum + t.amount, 0) / recurringIncome.length) * 4.33 // weeks to month
+      ? (recurringIncome.reduce((sum, t) => sum + t.amount, 0) / recurringIncome.length) * 4.33
       : 0
     
-    // Add side project income 
     const estimatedMonthlyIncome = recurringMonthlyIncome + monthlyProjectIncome
     
-    // Calculate surplus/deficit
     const monthlySurplusDeficit = estimatedMonthlyIncome - totalMonthlyObligations
     const dailySurplusDeficit = monthlySurplusDeficit / 30.44
     
@@ -484,7 +884,7 @@ export const calculateDailyTarget = async (userId: string) => {
   } catch (error) {
     console.error('Error calculating daily target:', error)
     return {
-      dailyTarget: 150, // Fallback to default
+      dailyTarget: 150,
       monthlyGoalObligations: 0,
       monthlyRecurringTotal: 0,
       totalMonthlyObligations: 0,
@@ -496,4 +896,4 @@ export const calculateDailyTarget = async (userId: string) => {
       recurringExpensesCount: 0
     }
   }
-} 
+}

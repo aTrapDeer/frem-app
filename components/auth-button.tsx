@@ -2,17 +2,17 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { signInWithGoogle, signOut } from "@/lib/auth"
+import { useAuth } from "@/contexts/auth-context"
 import { ArrowRight, LogOut } from "lucide-react"
 
 interface AuthButtonProps {
-  isAuthenticated: boolean
   variant?: "default" | "outline" | "ghost"
   size?: "sm" | "default" | "lg"
   className?: string
 }
 
-export function AuthButton({ isAuthenticated, variant = "default", size = "default", className }: AuthButtonProps) {
+export function AuthButton({ variant = "default", size = "default", className }: AuthButtonProps) {
+  const { isAuthenticated, signInWithGoogle, logout } = useAuth()
   const [loading, setLoading] = useState(false)
 
   const handleSignIn = async () => {
@@ -29,8 +29,7 @@ export function AuthButton({ isAuthenticated, variant = "default", size = "defau
   const handleSignOut = async () => {
     try {
       setLoading(true)
-      await signOut()
-      window.location.href = '/'
+      await logout()
     } catch (error) {
       console.error('Sign out error:', error)
     } finally {
@@ -77,4 +76,4 @@ export function AuthButton({ isAuthenticated, variant = "default", size = "defau
       )}
     </Button>
   )
-} 
+}
