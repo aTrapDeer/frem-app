@@ -228,6 +228,33 @@ const createTableStatements = [
     )`
   },
   {
+    name: 'income_sources',
+    sql: `CREATE TABLE IF NOT EXISTS income_sources (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      income_type TEXT NOT NULL CHECK (income_type IN ('salary', 'hourly', 'commission', 'freelance', 'other')),
+      pay_frequency TEXT NOT NULL CHECK (pay_frequency IN ('weekly', 'biweekly', 'semimonthly', 'monthly', 'variable')),
+      base_amount REAL DEFAULT 0 CHECK (base_amount >= 0),
+      hours_per_week REAL DEFAULT 0 CHECK (hours_per_week >= 0),
+      is_commission_based INTEGER DEFAULT 0,
+      commission_high REAL DEFAULT 0 CHECK (commission_high >= 0),
+      commission_low REAL DEFAULT 0 CHECK (commission_low >= 0),
+      commission_frequency_per_period REAL DEFAULT 0 CHECK (commission_frequency_per_period >= 0),
+      estimated_monthly_low REAL DEFAULT 0,
+      estimated_monthly_mid REAL DEFAULT 0,
+      estimated_monthly_high REAL DEFAULT 0,
+      status TEXT DEFAULT 'active' CHECK (status IN ('active', 'paused', 'ended')),
+      start_date TEXT,
+      end_date TEXT,
+      is_primary INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  },
+  {
     name: 'side_project_earnings',
     sql: `CREATE TABLE IF NOT EXISTS side_project_earnings (
       id TEXT PRIMARY KEY NOT NULL,
@@ -354,6 +381,7 @@ const createIndexStatements = [
   'CREATE INDEX IF NOT EXISTS idx_recurring_expenses_user_status ON recurring_expenses(user_id, status)',
   'CREATE INDEX IF NOT EXISTS idx_recurring_expenses_due_date ON recurring_expenses(due_date)',
   'CREATE INDEX IF NOT EXISTS idx_side_projects_user_status ON side_projects(user_id, status)',
+  'CREATE INDEX IF NOT EXISTS idx_income_sources_user_status ON income_sources(user_id, status)',
   'CREATE INDEX IF NOT EXISTS idx_financial_milestones_user_status ON financial_milestones(user_id, status)',
   'CREATE INDEX IF NOT EXISTS idx_financial_milestones_deadline ON financial_milestones(deadline)',
   'CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read)',

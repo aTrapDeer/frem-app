@@ -38,6 +38,7 @@ export default function SummaryPage() {
   const [loading, setLoading] = useState(true)
   const [financialData, setFinancialData] = useState<UserFinancialData | null>(null)
   const [targetData, setTargetData] = useState<any>(null)
+  const [incomeSummary, setIncomeSummary] = useState<any>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
 
@@ -54,10 +55,11 @@ export default function SummaryPage() {
         if (!response.ok) throw new Error('Failed to fetch summary data')
         
         const data = await response.json()
-        const { milestones: milestonesData, goals: goalsData, recurringExpenses: recurringExpensesData, sideProjects: sideProjectsData, transactions: recentTransactionsData, targetCalculation, financialData: apiFinancialData } = data
+        const { milestones: milestonesData, goals: goalsData, recurringExpenses: recurringExpensesData, sideProjects: sideProjectsData, transactions: recentTransactionsData, targetCalculation, financialData: apiFinancialData, incomeSummary: incomeSummaryData } = data
         
         setMilestones(milestonesData)
         setTargetData(targetCalculation)
+        setIncomeSummary(incomeSummaryData)
         
         // Calculate estimated monthly income from recent transactions
         const recentIncome = recentTransactionsData
@@ -339,12 +341,36 @@ export default function SummaryPage() {
                       </div>
                     </div>
                     <div>
-                      <h4 className="font-medium text-slate-800 mb-3">Income Sources</h4>
+                      <h4 className="font-medium text-slate-800 mb-3">
+                        Income Sources
+                        {incomeSummary?.hasCommissionIncome && (
+                          <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                            Variable Income
+                          </span>
+                        )}
+                      </h4>
                       <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">Primary Income:</span>
-                          <span className="font-medium text-green-600">${(targetData.estimatedMonthlyIncome - targetData.monthlyProjectIncome).toLocaleString()}</span>
-                        </div>
+                        {incomeSummary?.hasCommissionIncome ? (
+                          <>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-600">Conservative:</span>
+                              <span className="font-medium text-red-500">${incomeSummary.totalMonthlyLow.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-600">Safe Average:</span>
+                              <span className="font-medium text-green-600">${incomeSummary.totalMonthlyMid.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-600">Optimistic:</span>
+                              <span className="font-medium text-blue-600">${incomeSummary.totalMonthlyHigh.toLocaleString()}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex justify-between">
+                            <span className="text-slate-600">Primary Income:</span>
+                            <span className="font-medium text-green-600">${(targetData.estimatedMonthlyIncome - targetData.monthlyProjectIncome).toLocaleString()}</span>
+                          </div>
+                        )}
                         <div className="flex justify-between">
                           <span className="text-slate-600">Side Projects:</span>
                           <span className="font-medium text-blue-600">${targetData.monthlyProjectIncome.toLocaleString()}</span>
@@ -353,6 +379,11 @@ export default function SummaryPage() {
                           <span className="font-semibold text-slate-800">Total Monthly Income:</span>
                           <span className="font-semibold text-slate-800">${targetData.estimatedMonthlyIncome.toLocaleString()}</span>
                         </div>
+                        {incomeSummary?.hasCommissionIncome && (
+                          <p className="text-xs text-slate-500 pt-2">
+                            💡 Goals calculated using &quot;Safe Average&quot; for reliability
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>

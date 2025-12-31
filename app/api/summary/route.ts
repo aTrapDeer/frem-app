@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { getMilestones, getGoals, getRecurringExpenses, getSideProjects, getTransactions, calculateDailyTarget } from '@/lib/database'
+import { getMilestones, getGoals, getRecurringExpenses, getSideProjects, getTransactions, calculateDailyTarget, getIncomeSummary } from '@/lib/database'
 
 export async function GET() {
   try {
@@ -12,14 +12,15 @@ export async function GET() {
 
     const userId = session.user.id
 
-    // Fetch all user financial data
-    const [milestones, goals, recurringExpenses, sideProjects, transactions, targetCalculation] = await Promise.all([
+    // Fetch all user financial data including income sources
+    const [milestones, goals, recurringExpenses, sideProjects, transactions, targetCalculation, incomeSummary] = await Promise.all([
       getMilestones(userId),
       getGoals(userId),
       getRecurringExpenses(userId),
       getSideProjects(userId),
       getTransactions(userId),
-      calculateDailyTarget(userId)
+      calculateDailyTarget(userId),
+      getIncomeSummary(userId).catch(() => null) // Handle case where table doesn't exist yet
     ])
 
     // Calculate income from recent transactions
@@ -33,6 +34,7 @@ export async function GET() {
       sideProjects,
       transactions,
       targetCalculation,
+      incomeSummary, // Include income sources summary
       financialData: {
         income: totalIncome,
         expenses: recurringExpenses.map(e => ({ name: e.name, amount: e.amount })),

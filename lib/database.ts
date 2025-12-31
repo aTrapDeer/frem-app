@@ -847,24 +847,52 @@ export const calculateDailyTarget = async (userId: string) => {
     const activeSideProjects = sideProjects.filter(project => project.status === 'active')
     const monthlyProjectIncome = activeSideProjects.reduce((sum, project) => sum + project.current_monthly_earnings, 0)
     
-    // Get recent transactions for income estimation
-    const recentTransactions = await getTransactions(userId)
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    // Get income from income sources (NEW)
+    let incomeFromSources = 0
+    let hasCommissionIncome = false
+    let incomeEstimateLow = 0
+    let incomeEstimateMid = 0
+    let incomeEstimateHigh = 0
     
-    const recentIncomeTransactions = recentTransactions.filter(t => 
-      t.type === 'income' && new Date(t.created_at) >= thirtyDaysAgo
-    )
+    try {
+      const incomeSources = await getIncomeSources(userId)
+      const activeSources = incomeSources.filter(s => s.status === 'active')
+      
+      if (activeSources.length > 0) {
+        hasCommissionIncome = activeSources.some(s => s.is_commission_based)
+        incomeEstimateLow = activeSources.reduce((sum, s) => sum + s.estimated_monthly_low, 0)
+        incomeEstimateMid = activeSources.reduce((sum, s) => sum + s.estimated_monthly_mid, 0)
+        incomeEstimateHigh = activeSources.reduce((sum, s) => sum + s.estimated_monthly_high, 0)
+        
+        // Use the safe middle estimate for calculations
+        incomeFromSources = incomeEstimateMid
+      }
+    } catch {
+      // Income sources table might not exist yet, fall back to transaction-based estimate
+    }
     
-    const recurringIncome = recentIncomeTransactions.filter(t => 
-      t.category === 'salary' || t.category === 'freelance' || t.category === 'business'
-    )
+    // Fall back to transaction-based income estimate if no income sources
+    let recurringMonthlyIncome = 0
+    if (incomeFromSources === 0) {
+      const recentTransactions = await getTransactions(userId)
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      
+      const recentIncomeTransactions = recentTransactions.filter(t => 
+        t.type === 'income' && new Date(t.created_at) >= thirtyDaysAgo
+      )
+      
+      const recurringIncome = recentIncomeTransactions.filter(t => 
+        t.category === 'salary' || t.category === 'freelance' || t.category === 'business'
+      )
+      
+      recurringMonthlyIncome = recurringIncome.length > 0 
+        ? (recurringIncome.reduce((sum, t) => sum + t.amount, 0) / recurringIncome.length) * 4.33
+        : 0
+    }
     
-    const recurringMonthlyIncome = recurringIncome.length > 0 
-      ? (recurringIncome.reduce((sum, t) => sum + t.amount, 0) / recurringIncome.length) * 4.33
-      : 0
-    
-    const estimatedMonthlyIncome = recurringMonthlyIncome + monthlyProjectIncome
+    // Total monthly income: income sources + side projects (or transaction fallback + side projects)
+    const estimatedMonthlyIncome = (incomeFromSources > 0 ? incomeFromSources : recurringMonthlyIncome) + monthlyProjectIncome
     
     const monthlySurplusDeficit = estimatedMonthlyIncome - totalMonthlyObligations
     const dailySurplusDeficit = monthlySurplusDeficit / 30.44
@@ -879,7 +907,12 @@ export const calculateDailyTarget = async (userId: string) => {
       monthlySurplusDeficit: Math.round(monthlySurplusDeficit * 100) / 100,
       dailySurplusDeficit: Math.round(dailySurplusDeficit * 100) / 100,
       activeGoalsCount: activeGoals.length,
-      recurringExpensesCount: recurringExpenses.length
+      recurringExpensesCount: recurringExpenses.length,
+      // New income source fields
+      hasCommissionIncome,
+      incomeEstimateLow: Math.round(incomeEstimateLow * 100) / 100,
+      incomeEstimateMid: Math.round(incomeEstimateMid * 100) / 100,
+      incomeEstimateHigh: Math.round(incomeEstimateHigh * 100) / 100,
     }
   } catch (error) {
     console.error('Error calculating daily target:', error)
@@ -893,7 +926,265 @@ export const calculateDailyTarget = async (userId: string) => {
       monthlySurplusDeficit: 0,
       dailySurplusDeficit: 0,
       activeGoalsCount: 0,
-      recurringExpensesCount: 0
+      recurringExpensesCount: 0,
+      hasCommissionIncome: false,
+      incomeEstimateLow: 0,
+      incomeEstimateMid: 0,
+      incomeEstimateHigh: 0,
     }
+  }
+}
+
+// =============================================
+// Income Sources
+// =============================================
+
+export type IncomeSource = {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  income_type: 'salary' | 'hourly' | 'commission' | 'freelance' | 'other'
+  pay_frequency: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'variable'
+  base_amount: number
+  hours_per_week: number
+  is_commission_based: boolean
+  commission_high: number
+  commission_low: number
+  commission_frequency_per_period: number
+  estimated_monthly_low: number
+  estimated_monthly_mid: number
+  estimated_monthly_high: number
+  status: 'active' | 'paused' | 'ended'
+  start_date: string | null
+  end_date: string | null
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Helper to calculate monthly estimates based on income type and frequency
+function calculateMonthlyEstimates(source: Partial<IncomeSource>): { low: number; mid: number; high: number } {
+  const baseAmount = source.base_amount || 0
+  const frequency = source.pay_frequency || 'monthly'
+  
+  // Calculate base monthly income
+  let baseMonthly = 0
+  switch (frequency) {
+    case 'weekly':
+      baseMonthly = baseAmount * 4.33
+      break
+    case 'biweekly':
+      baseMonthly = baseAmount * 2.17
+      break
+    case 'semimonthly':
+      baseMonthly = baseAmount * 2
+      break
+    case 'monthly':
+    case 'variable':
+      baseMonthly = baseAmount
+      break
+  }
+  
+  // For hourly, calculate based on hours per week
+  if (source.income_type === 'hourly' && source.hours_per_week) {
+    baseMonthly = baseAmount * source.hours_per_week * 4.33
+  }
+  
+  // If commission-based, calculate the variable component
+  if (source.is_commission_based) {
+    const commissionLow = source.commission_low || 0
+    const commissionHigh = source.commission_high || 0
+    const frequency = source.commission_frequency_per_period || 0
+    
+    // Calculate per pay period commission
+    const commissionPerPeriodLow = commissionLow * frequency
+    const commissionPerPeriodHigh = commissionHigh * frequency
+    const commissionPerPeriodMid = ((commissionLow + commissionHigh) / 2) * frequency
+    
+    // Convert to monthly based on pay frequency
+    let commissionMultiplier = 1
+    switch (source.pay_frequency) {
+      case 'weekly':
+        commissionMultiplier = 4.33
+        break
+      case 'biweekly':
+        commissionMultiplier = 2.17
+        break
+      case 'semimonthly':
+        commissionMultiplier = 2
+        break
+      case 'monthly':
+      case 'variable':
+        commissionMultiplier = 1
+        break
+    }
+    
+    const monthlyCommissionLow = commissionPerPeriodLow * commissionMultiplier
+    const monthlyCommissionMid = commissionPerPeriodMid * commissionMultiplier
+    const monthlyCommissionHigh = commissionPerPeriodHigh * commissionMultiplier
+    
+    return {
+      low: Math.round((baseMonthly + monthlyCommissionLow) * 100) / 100,
+      mid: Math.round((baseMonthly + monthlyCommissionMid) * 100) / 100,
+      high: Math.round((baseMonthly + monthlyCommissionHigh) * 100) / 100
+    }
+  }
+  
+  // Non-commission income has same low/mid/high
+  return {
+    low: Math.round(baseMonthly * 100) / 100,
+    mid: Math.round(baseMonthly * 100) / 100,
+    high: Math.round(baseMonthly * 100) / 100
+  }
+}
+
+function rowToIncomeSource(row: Record<string, unknown>): IncomeSource {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    name: row.name as string,
+    description: row.description as string | null,
+    income_type: row.income_type as IncomeSource['income_type'],
+    pay_frequency: row.pay_frequency as IncomeSource['pay_frequency'],
+    base_amount: row.base_amount as number,
+    hours_per_week: row.hours_per_week as number,
+    is_commission_based: Boolean(row.is_commission_based),
+    commission_high: row.commission_high as number,
+    commission_low: row.commission_low as number,
+    commission_frequency_per_period: row.commission_frequency_per_period as number,
+    estimated_monthly_low: row.estimated_monthly_low as number,
+    estimated_monthly_mid: row.estimated_monthly_mid as number,
+    estimated_monthly_high: row.estimated_monthly_high as number,
+    status: row.status as IncomeSource['status'],
+    start_date: row.start_date as string | null,
+    end_date: row.end_date as string | null,
+    is_primary: Boolean(row.is_primary),
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string
+  }
+}
+
+export const getIncomeSources = async (userId: string): Promise<IncomeSource[]> => {
+  const result = await db.execute({
+    sql: 'SELECT * FROM income_sources WHERE user_id = ? AND status != ? ORDER BY is_primary DESC, created_at DESC',
+    args: [userId, 'ended']
+  })
+  return result.rows.map(row => rowToIncomeSource(row as Record<string, unknown>))
+}
+
+export const getIncomeSourceById = async (id: string): Promise<IncomeSource | null> => {
+  const result = await db.execute({
+    sql: 'SELECT * FROM income_sources WHERE id = ?',
+    args: [id]
+  })
+  return result.rows.length > 0 ? rowToIncomeSource(result.rows[0] as Record<string, unknown>) : null
+}
+
+export const createIncomeSource = async (source: Omit<IncomeSource, 'id' | 'created_at' | 'updated_at' | 'estimated_monthly_low' | 'estimated_monthly_mid' | 'estimated_monthly_high'>): Promise<IncomeSource> => {
+  const id = generateUUID()
+  const now = getCurrentTimestamp()
+  
+  // Calculate monthly estimates
+  const estimates = calculateMonthlyEstimates(source)
+  
+  await db.execute({
+    sql: `INSERT INTO income_sources (
+      id, user_id, name, description, income_type, pay_frequency,
+      base_amount, hours_per_week, is_commission_based,
+      commission_high, commission_low, commission_frequency_per_period,
+      estimated_monthly_low, estimated_monthly_mid, estimated_monthly_high,
+      status, start_date, end_date, is_primary, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id, source.user_id, source.name, source.description || null,
+      source.income_type, source.pay_frequency,
+      source.base_amount || 0, source.hours_per_week || 0,
+      source.is_commission_based ? 1 : 0,
+      source.commission_high || 0, source.commission_low || 0,
+      source.commission_frequency_per_period || 0,
+      estimates.low, estimates.mid, estimates.high,
+      source.status || 'active',
+      source.start_date || null, source.end_date || null,
+      source.is_primary ? 1 : 0, now, now
+    ]
+  })
+  
+  return getIncomeSourceById(id) as Promise<IncomeSource>
+}
+
+export const updateIncomeSource = async (id: string, updates: Partial<IncomeSource>): Promise<IncomeSource> => {
+  const now = getCurrentTimestamp()
+  
+  // Get current source to merge with updates for estimate calculation
+  const current = await getIncomeSourceById(id)
+  if (!current) throw new Error('Income source not found')
+  
+  const merged = { ...current, ...updates }
+  const estimates = calculateMonthlyEstimates(merged)
+  
+  const fields: string[] = []
+  const values: unknown[] = []
+  
+  // Build dynamic update query
+  const allowedFields = [
+    'name', 'description', 'income_type', 'pay_frequency',
+    'base_amount', 'hours_per_week', 'is_commission_based',
+    'commission_high', 'commission_low', 'commission_frequency_per_period',
+    'status', 'start_date', 'end_date', 'is_primary'
+  ]
+  
+  for (const [key, value] of Object.entries(updates)) {
+    if (allowedFields.includes(key)) {
+      fields.push(`${key} = ?`)
+      if (key === 'is_commission_based' || key === 'is_primary') {
+        values.push(value ? 1 : 0)
+      } else {
+        values.push(value ?? null)
+      }
+    }
+  }
+  
+  // Always update estimates and timestamp
+  fields.push('estimated_monthly_low = ?', 'estimated_monthly_mid = ?', 'estimated_monthly_high = ?', 'updated_at = ?')
+  values.push(estimates.low, estimates.mid, estimates.high, now)
+  values.push(id)
+  
+  await db.execute({
+    sql: `UPDATE income_sources SET ${fields.join(', ')} WHERE id = ?`,
+    args: values
+  })
+  
+  return getIncomeSourceById(id) as Promise<IncomeSource>
+}
+
+export const deleteIncomeSource = async (id: string): Promise<void> => {
+  await db.execute({
+    sql: 'UPDATE income_sources SET status = ?, updated_at = ? WHERE id = ?',
+    args: ['ended', getCurrentTimestamp(), id]
+  })
+}
+
+// Get income summary for a user (used in dashboard/summary)
+export const getIncomeSummary = async (userId: string) => {
+  const sources = await getIncomeSources(userId)
+  const activeSources = sources.filter(s => s.status === 'active')
+  
+  const hasCommissionIncome = activeSources.some(s => s.is_commission_based)
+  
+  const totalMonthlyLow = activeSources.reduce((sum, s) => sum + s.estimated_monthly_low, 0)
+  const totalMonthlyMid = activeSources.reduce((sum, s) => sum + s.estimated_monthly_mid, 0)
+  const totalMonthlyHigh = activeSources.reduce((sum, s) => sum + s.estimated_monthly_high, 0)
+  
+  const primarySource = activeSources.find(s => s.is_primary)
+  
+  return {
+    sources: activeSources,
+    hasCommissionIncome,
+    totalMonthlyLow: Math.round(totalMonthlyLow * 100) / 100,
+    totalMonthlyMid: Math.round(totalMonthlyMid * 100) / 100,
+    totalMonthlyHigh: Math.round(totalMonthlyHigh * 100) / 100,
+    primarySource: primarySource || null,
+    sourceCount: activeSources.length
   }
 }

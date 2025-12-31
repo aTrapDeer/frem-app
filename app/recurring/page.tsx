@@ -5,10 +5,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Calendar, DollarSign, Plus, Edit, Trash2, RefreshCw, List, Grid3X3 } from "lucide-react"
+import { Calendar, DollarSign, Plus, Edit, Trash2, RefreshCw, List, Grid3X3, Wallet, Receipt } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
+import { IncomeSources } from "@/components/income-sources"
 
 interface RecurringExpense {
   id: string
@@ -33,6 +34,7 @@ export default function RecurringExpenses() {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year' | 'custom'>('month')
+  const [activeTab, setActiveTab] = useState<'income' | 'expenses'>('income')
 
   const [newExpense, setNewExpense] = useState({
     name: "",
@@ -196,10 +198,44 @@ export default function RecurringExpenses() {
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Recurring Monthly Expenses</h1>
-            <p className="text-gray-600">Manage your monthly subscriptions and recurring costs</p>
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">Income & Expenses</h1>
+            <p className="text-gray-600">Manage your income sources and recurring costs</p>
           </div>
 
+          {/* Tab Toggle */}
+          <div className="flex bg-slate-100 rounded-xl p-1 mb-8 max-w-md">
+            <button
+              onClick={() => setActiveTab('income')}
+              className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all ${
+                activeTab === 'income'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Wallet className="h-4 w-4" />
+              <span>Income Sources</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('expenses')}
+              className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all ${
+                activeTab === 'expenses'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Receipt className="h-4 w-4" />
+              <span>Recurring Expenses</span>
+            </button>
+          </div>
+
+          {/* Income Sources Tab */}
+          {activeTab === 'income' && (
+            <IncomeSources />
+          )}
+
+          {/* Expenses Tab */}
+          {activeTab === 'expenses' && (
+          <>
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
@@ -527,7 +563,7 @@ export default function RecurringExpenses() {
                   <Button 
                     onClick={addExpense}
                     disabled={submitting || !newExpense.name || !newExpense.amount || !newExpense.category || !newExpense.dueDate}
-                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white disabled:opacity-50"
+                    className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white disabled:opacity-50"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     {submitting ? "Adding..." : "Add Expense"}
@@ -536,6 +572,8 @@ export default function RecurringExpenses() {
               </Card>
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
       </div>
