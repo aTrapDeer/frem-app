@@ -4,7 +4,7 @@
  */
 
 import type { Adapter, AdapterUser, AdapterAccount, AdapterSession } from 'next-auth/adapters'
-import { turso, generateUUID, getCurrentTimestamp } from './turso'
+import { db, generateUUID, getCurrentTimestamp } from './turso'
 
 export function TursoAdapter(): Adapter {
   return {
@@ -12,14 +12,14 @@ export function TursoAdapter(): Adapter {
       const id = generateUUID()
       const now = getCurrentTimestamp()
       
-      await turso.execute({
+      await db.execute({
         sql: `INSERT INTO users (id, name, email, email_verified, image, created_at, updated_at) 
               VALUES (?, ?, ?, ?, ?, ?, ?)`,
         args: [id, user.name ?? null, user.email, user.emailVerified?.toISOString() ?? null, user.image ?? null, now, now]
       })
       
       // Also create default user settings
-      await turso.execute({
+      await db.execute({
         sql: `INSERT INTO user_settings (id, user_id, daily_budget_target, currency, created_at, updated_at)
               VALUES (?, ?, 150.00, 'USD', ?, ?)`,
         args: [generateUUID(), id, now, now]
@@ -35,7 +35,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async getUser(id) {
-      const result = await turso.execute({
+      const result = await db.execute({
         sql: 'SELECT * FROM users WHERE id = ?',
         args: [id]
       })
@@ -53,7 +53,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async getUserByEmail(email) {
-      const result = await turso.execute({
+      const result = await db.execute({
         sql: 'SELECT * FROM users WHERE email = ?',
         args: [email]
       })
@@ -71,7 +71,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async getUserByAccount({ providerAccountId, provider }) {
-      const result = await turso.execute({
+      const result = await db.execute({
         sql: `SELECT u.* FROM users u
               JOIN accounts a ON u.id = a.user_id
               WHERE a.provider = ? AND a.provider_account_id = ?`,
@@ -93,7 +93,7 @@ export function TursoAdapter(): Adapter {
     async updateUser(user) {
       const now = getCurrentTimestamp()
       
-      await turso.execute({
+      await db.execute({
         sql: `UPDATE users SET name = ?, email = ?, email_verified = ?, image = ?, updated_at = ?
               WHERE id = ?`,
         args: [
@@ -106,7 +106,7 @@ export function TursoAdapter(): Adapter {
         ]
       })
       
-      const result = await turso.execute({
+      const result = await db.execute({
         sql: 'SELECT * FROM users WHERE id = ?',
         args: [user.id]
       })
@@ -122,7 +122,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async deleteUser(userId) {
-      await turso.execute({
+      await db.execute({
         sql: 'DELETE FROM users WHERE id = ?',
         args: [userId]
       })
@@ -131,7 +131,7 @@ export function TursoAdapter(): Adapter {
     async linkAccount(account) {
       const id = generateUUID()
       
-      await turso.execute({
+      await db.execute({
         sql: `INSERT INTO accounts (id, user_id, type, provider, provider_account_id, refresh_token, access_token, expires_at, token_type, scope, id_token, session_state)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
@@ -154,7 +154,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async unlinkAccount({ providerAccountId, provider }) {
-      await turso.execute({
+      await db.execute({
         sql: 'DELETE FROM accounts WHERE provider = ? AND provider_account_id = ?',
         args: [provider, providerAccountId]
       })
@@ -163,7 +163,7 @@ export function TursoAdapter(): Adapter {
     async createSession(session) {
       const id = generateUUID()
       
-      await turso.execute({
+      await db.execute({
         sql: `INSERT INTO sessions (id, session_token, user_id, expires)
               VALUES (?, ?, ?, ?)`,
         args: [id, session.sessionToken, session.userId, session.expires.toISOString()]
@@ -173,7 +173,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async getSessionAndUser(sessionToken) {
-      const result = await turso.execute({
+      const result = await db.execute({
         sql: `SELECT s.*, u.id as user_id, u.name, u.email, u.email_verified, u.image
               FROM sessions s
               JOIN users u ON s.user_id = u.id
@@ -202,12 +202,12 @@ export function TursoAdapter(): Adapter {
     },
 
     async updateSession(session) {
-      await turso.execute({
+      await db.execute({
         sql: `UPDATE sessions SET expires = ? WHERE session_token = ?`,
         args: [session.expires?.toISOString() ?? null, session.sessionToken]
       })
       
-      const result = await turso.execute({
+      const result = await db.execute({
         sql: 'SELECT * FROM sessions WHERE session_token = ?',
         args: [session.sessionToken]
       })
@@ -223,14 +223,14 @@ export function TursoAdapter(): Adapter {
     },
 
     async deleteSession(sessionToken) {
-      await turso.execute({
+      await db.execute({
         sql: 'DELETE FROM sessions WHERE session_token = ?',
         args: [sessionToken]
       })
     },
 
     async createVerificationToken(token) {
-      await turso.execute({
+      await db.execute({
         sql: `INSERT INTO verification_tokens (identifier, token, expires)
               VALUES (?, ?, ?)`,
         args: [token.identifier, token.token, token.expires.toISOString()]
@@ -240,14 +240,14 @@ export function TursoAdapter(): Adapter {
     },
 
     async useVerificationToken({ identifier, token }) {
-      const result = await turso.execute({
+      const result = await db.execute({
         sql: 'SELECT * FROM verification_tokens WHERE identifier = ? AND token = ?',
         args: [identifier, token]
       })
       
       if (!result.rows[0]) return null
       
-      await turso.execute({
+      await db.execute({
         sql: 'DELETE FROM verification_tokens WHERE identifier = ? AND token = ?',
         args: [identifier, token]
       })
@@ -261,4 +261,3 @@ export function TursoAdapter(): Adapter {
     },
   }
 }
-

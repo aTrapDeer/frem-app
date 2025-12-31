@@ -15,7 +15,6 @@ import { Progress } from "@/components/ui/progress"
 import { ArrowRight, ArrowLeft, Target, Edit, Trash2 } from "lucide-react"
 import { SideProjects } from "@/components/side-projects"
 import { useAuth } from "@/contexts/auth-context"
-import { getGoals, createGoal, updateGoal, calculateDailyTarget } from "@/lib/database"
 
 const goalSchema = z.object({
   title: z.string().min(1, "Goal title is required"),
@@ -60,15 +59,18 @@ export default function GoalsPage() {
   // Watch form values for step navigation
   const watchedValues = watch()
 
-  // Load goals from database
+  // Load goals from API
   useEffect(() => {
     async function fetchGoals() {
       if (!user) return
       
       try {
         setLoading(true)
-        const data = await getGoals(user.id)
-        setGoals(data)
+        const response = await fetch('/api/goals')
+        if (response.ok) {
+          const data = await response.json()
+          setGoals(data)
+        }
       } catch (error) {
         console.error('Error fetching goals:', error)
       } finally {
@@ -87,34 +89,32 @@ export default function GoalsPage() {
     try {
       setSubmitting(true)
       
-      const newGoal = await createGoal({
-        user_id: user.id,
-        title: data.title,
-        target_amount: data.amount,
-        current_amount: 0,
-        deadline: data.deadline,
-        category: data.category,
-        status: 'active',
-        priority: 'medium'
+      const response = await fetch('/api/goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: data.title,
+          target_amount: data.amount,
+          current_amount: 0,
+          deadline: data.deadline,
+          category: data.category,
+          status: 'active',
+          priority: 'medium'
+        })
       })
       
-      setGoals(prev => [newGoal, ...prev])
-      reset()
-      setStep(1)
-      setSuccessMessage(`Great! "${data.title}" goal has been created successfully.`)
-      
-      // Refresh daily target calculations since goals affect the target
-      try {
-        await calculateDailyTarget(user.id)
-      } catch (error) {
-        console.error('Error refreshing daily target:', error)
+      if (response.ok) {
+        const newGoal = await response.json()
+        setGoals(prev => [newGoal, ...prev])
+        reset()
+        setStep(1)
+        setSuccessMessage(`Great! "${data.title}" goal has been created successfully.`)
       }
       
       // Clear success message after 5 seconds
       setTimeout(() => setSuccessMessage(""), 5000)
     } catch (error) {
       console.error('Error creating goal:', error)
-      // You could add error state here for user feedback
     } finally {
       setSubmitting(false)
     }
@@ -126,26 +126,25 @@ export default function GoalsPage() {
     try {
       setSubmitting(true)
       
-      const updatedGoal = await updateGoal(goalId, {
-        title: updates.title,
-        target_amount: updates.amount,
-        deadline: updates.deadline,
-        category: updates.category,
-        updated_at: new Date().toISOString()
+      const response = await fetch('/api/goals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: goalId,
+          title: updates.title,
+          target_amount: updates.amount,
+          deadline: updates.deadline,
+          category: updates.category
+        })
       })
       
-      setGoals(prev => prev.map(goal => 
-        goal.id === goalId ? updatedGoal : goal
-      ))
-      
-      setEditingGoal(null)
-      setSuccessMessage("Goal updated successfully!")
-      
-      // Refresh daily target calculations since goal changes affect the target
-      try {
-        await calculateDailyTarget(user.id)
-      } catch (error) {
-        console.error('Error refreshing daily target:', error)
+      if (response.ok) {
+        const updatedGoal = await response.json()
+        setGoals(prev => prev.map(goal => 
+          goal.id === goalId ? updatedGoal : goal
+        ))
+        setEditingGoal(null)
+        setSuccessMessage("Goal updated successfully!")
       }
       
       // Clear success message after 5 seconds
@@ -161,10 +160,17 @@ export default function GoalsPage() {
     if (!user || !confirm('Are you sure you want to delete this goal?')) return
     
     try {
-      await updateGoal(goalId, { status: 'cancelled' })
-      setGoals(prev => prev.filter(goal => goal.id !== goalId))
-      setSuccessMessage("Goal deleted successfully!")
-      setTimeout(() => setSuccessMessage(""), 5000)
+      const response = await fetch('/api/goals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: goalId, status: 'cancelled' })
+      })
+      
+      if (response.ok) {
+        setGoals(prev => prev.filter(goal => goal.id !== goalId))
+        setSuccessMessage("Goal deleted successfully!")
+        setTimeout(() => setSuccessMessage(""), 5000)
+      }
     } catch (error) {
       console.error('Error deleting goal:', error)
     }
@@ -507,7 +513,7 @@ function GoalWizardStep({ step, register, errors, watchedValues, onNext, onPrev,
             <Button 
               type="submit" 
               disabled={!isValid || submitting}
-              className="bg-gradient-to-r from-indigo-500 to-fuchsia-600 hover:from-indigo-600 hover:to-fuchsia-700 text-white"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               {submitting ? "Creating..." : "Create Goal"}
             </Button>

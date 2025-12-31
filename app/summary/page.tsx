@@ -10,7 +10,6 @@ import { Calendar, DollarSign, Target, MapPin, X, CreditCard, TrendingUp, Trendi
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
-import { getMilestones, getGoals, getRecurringExpenses, getSideProjects, getTransactions, calculateDailyTarget } from "@/lib/database"
 
 const BubbleMap = React.lazy(() => import("@/components/bubble-map"))
 
@@ -42,7 +41,7 @@ export default function SummaryPage() {
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
 
-  // Fetch user's actual milestones and financial data
+  // Fetch user's actual milestones and financial data from API
   useEffect(() => {
     async function fetchData() {
       if (!user) return
@@ -50,15 +49,12 @@ export default function SummaryPage() {
       try {
         setLoading(true)
         
-        // Fetch all user financial data for the journey map
-        const [milestonesData, goalsData, recurringExpensesData, sideProjectsData, recentTransactionsData, targetCalculation] = await Promise.all([
-          getMilestones(user.id),
-          getGoals(user.id),
-          getRecurringExpenses(user.id),
-          getSideProjects(user.id),
-          getTransactions(user.id), // Get recent transactions to estimate income
-          calculateDailyTarget(user.id) // Get smart target calculations
-        ])
+        // Fetch all user financial data from summary API
+        const response = await fetch('/api/summary')
+        if (!response.ok) throw new Error('Failed to fetch summary data')
+        
+        const data = await response.json()
+        const { milestones: milestonesData, goals: goalsData, recurringExpenses: recurringExpensesData, sideProjects: sideProjectsData, transactions: recentTransactionsData, targetCalculation, financialData: apiFinancialData } = data
         
         setMilestones(milestonesData)
         setTargetData(targetCalculation)

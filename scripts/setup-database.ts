@@ -27,7 +27,7 @@ if (!process.env.TURSO_AUTH_TOKEN) {
   process.exit(1)
 }
 
-const turso = createClient({
+const db = createClient({
   url: process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN,
 })
@@ -389,7 +389,7 @@ async function setup() {
 
   // Test connection
   try {
-    await turso.execute('SELECT 1')
+    await db.execute({ sql: 'SELECT 1' })
     console.log('✅ Database connection successful!\n')
   } catch (error) {
     console.error('❌ Failed to connect to database:', error)
@@ -401,7 +401,7 @@ async function setup() {
   
   for (const table of createTableStatements) {
     try {
-      await turso.execute(table.sql)
+      await db.execute({ sql: table.sql })
       console.log(`   ✅ ${table.name}`)
     } catch (error) {
       console.error(`   ❌ ${table.name}:`, error)
@@ -413,7 +413,7 @@ async function setup() {
   
   for (const indexSql of createIndexStatements) {
     try {
-      await turso.execute(indexSql)
+      await db.execute({ sql: indexSql })
       const indexName = indexSql.match(/idx_\w+/)?.[0] || 'index'
       console.log(`   ✅ ${indexName}`)
     } catch (error) {
@@ -426,7 +426,7 @@ async function setup() {
   
   for (const cat of defaultCategories) {
     try {
-      await turso.execute({
+      await db.execute({
         sql: `INSERT OR IGNORE INTO transaction_categories (id, name, type, color, icon, is_system) 
               VALUES (?, ?, ?, ?, ?, 1)`,
         args: [cat.id, cat.name, cat.type, cat.color, cat.icon]
@@ -440,11 +440,11 @@ async function setup() {
   // Verify setup
   console.log('\n📋 Verifying setup...\n')
   
-  const tables = await turso.execute(`
-    SELECT name FROM sqlite_master 
+  const tables = await db.execute({
+    sql: `SELECT name FROM sqlite_master 
     WHERE type='table' AND name NOT LIKE 'sqlite_%'
-    ORDER BY name
-  `)
+    ORDER BY name`
+  })
   
   console.log(`   Found ${tables.rows.length} tables:`)
   tables.rows.forEach(row => {

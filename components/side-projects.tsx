@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Plus, Briefcase, DollarSign, TrendingUp } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { getSideProjects, createSideProject } from "@/lib/database"
 
 interface SideProject {
   id: string
@@ -35,15 +34,18 @@ export function SideProjects() {
     category: "",
   })
 
-  // Fetch side projects from database
+  // Fetch side projects from API
   useEffect(() => {
     async function fetchProjects() {
       if (!user) return
       
       try {
         setLoading(true)
-        const data = await getSideProjects(user.id)
-        setProjects(data)
+        const response = await fetch('/api/side-projects')
+        if (response.ok) {
+          const data = await response.json()
+          setProjects(data)
+        }
       } catch (error) {
         console.error('Error fetching side projects:', error)
       } finally {
@@ -77,20 +79,26 @@ export function SideProjects() {
     
     try {
       setSubmitting(true)
-      const project = await createSideProject({
-        user_id: user.id,
-        name: newProject.name,
-        description: newProject.description,
-        projected_monthly_earnings: Number(newProject.projected_monthly_earnings) || 0,
-        category: newProject.category || null,
-        status: "planning",
-        current_monthly_earnings: 0,
-        time_invested_weekly: 0,
+      const response = await fetch('/api/side-projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newProject.name,
+          description: newProject.description,
+          projected_monthly_earnings: Number(newProject.projected_monthly_earnings) || 0,
+          category: newProject.category || null,
+          status: "planning",
+          current_monthly_earnings: 0,
+          time_invested_weekly: 0,
+        })
       })
       
-      setProjects(prev => [project, ...prev])
-      setNewProject({ name: "", description: "", projected_monthly_earnings: "", category: "" })
-      setShowAddForm(false)
+      if (response.ok) {
+        const project = await response.json()
+        setProjects(prev => [project, ...prev])
+        setNewProject({ name: "", description: "", projected_monthly_earnings: "", category: "" })
+        setShowAddForm(false)
+      }
     } catch (error) {
       console.error('Error creating side project:', error)
     } finally {

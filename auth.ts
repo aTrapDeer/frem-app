@@ -2,12 +2,25 @@ import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { TursoAdapter } from '@/lib/auth-adapter'
 
+if (!process.env.AUTH_SECRET) {
+  throw new Error('AUTH_SECRET is required. Please set it in your .env.local file')
+}
+
+if (!process.env.GOOGLE_CLIENT_ID) {
+  throw new Error('GOOGLE_CLIENT_ID is required. Please set it in your .env.local file')
+}
+
+if (!process.env.GOOGLE_CLIENT_SECRET) {
+  throw new Error('GOOGLE_CLIENT_SECRET is required. Please set it in your .env.local file')
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: TursoAdapter(),
+  secret: process.env.AUTH_SECRET,
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
   ],
   pages: {
@@ -16,8 +29,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async session({ session, user }) {
-      // Add user id to the session
-      if (session.user) {
+      // Add user id to the session (for database strategy)
+      if (session.user && user) {
         session.user.id = user.id
       }
       return session
@@ -34,4 +47,3 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   debug: process.env.NODE_ENV === 'development',
 })
-

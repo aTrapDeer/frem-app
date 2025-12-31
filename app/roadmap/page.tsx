@@ -14,7 +14,6 @@ import Link from "next/link"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
-import { getMilestones } from "@/lib/database"
 
 interface Milestone {
   id: string
@@ -33,15 +32,18 @@ export default function Roadmap() {
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Fetch user's milestones
+  // Fetch user's milestones from API
   useEffect(() => {
     async function fetchMilestones() {
       if (!user) return
       
       try {
         setLoading(true)
-        const data = await getMilestones(user.id)
-        setMilestones(data)
+        const response = await fetch('/api/milestones')
+        if (response.ok) {
+          const data = await response.json()
+          setMilestones(data)
+        }
       } catch (error) {
         console.error('Error fetching milestones:', error)
       } finally {

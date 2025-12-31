@@ -7,12 +7,33 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/contexts/auth-context"
-import { createTransaction, getTransactions, Transaction, calculateDailyTarget, createTransactionWithAllocations, getGoals, getRecurringExpenses } from "@/lib/database"
 import { Plus, Minus, DollarSign, TrendingUp, Target, TrendingDown } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 
+interface Transaction {
+  id: string
+  user_id: string
+  type: 'income' | 'expense'
+  amount: number
+  description: string
+  category: string | null
+  transaction_date: string
+  transaction_time: string
+  created_at: string
+  updated_at: string
+}
+
+interface TargetData {
+  dailyTarget: number
+  activeGoalsCount: number
+  recurringExpensesCount: number
+  monthlyGoalObligations: number
+  monthlyRecurringTotal: number
+  dailySurplusDeficit: number
+}
+
 export default function DailyInterface() {
-  const { user, userSettings, loading } = useAuth()
+  const { user, userSettings, isLoading } = useAuth()
   const router = useRouter()
   const [incomeAmount, setIncomeAmount] = useState("")
   const [expenseAmount, setExpenseAmount] = useState("")
@@ -21,20 +42,15 @@ export default function DailyInterface() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [transactionsLoading, setTransactionsLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [targetData, setTargetData] = useState<any>(null)
+  const [targetData, setTargetData] = useState<TargetData | null>(null)
   const [targetLoading, setTargetLoading] = useState(true)
-  const [showAllocationModal, setShowAllocationModal] = useState(false)
-  const [pendingTransaction, setPendingTransaction] = useState<any>(null)
-  const [availableGoals, setAvailableGoals] = useState<any[]>([])
-  const [availableExpenses, setAvailableExpenses] = useState<any[]>([])
-  const [allocations, setAllocations] = useState<{ type: 'goal' | 'expense', id: string, name: string, amount: number }[]>([])
 
   // Redirect unauthenticated users
   useEffect(() => {
-    if (!loading && !user) {
+    if (!isLoading && !user) {
       router.push('/')
     }
-  }, [user, loading, router])
+  }, [user, isLoading, router])
 
   // Fetch today's transactions
   useEffect(() => {
@@ -44,8 +60,11 @@ export default function DailyInterface() {
       try {
         setTransactionsLoading(true)
         const today = new Date().toISOString().split('T')[0]
-        const data = await getTransactions(user.id, today)
-        setTransactions(data)
+        const response = await fetch(`/api/transactions?date=${today}`)
+        if (response.ok) {
+          const data = await response.json()
+          setTransactions(data)
+        }
       } catch (error) {
         console.error('Error fetching transactions:', error)
       } finally {
@@ -58,29 +77,6 @@ export default function DailyInterface() {
     }
   }, [user])
 
-  // Fetch goals and expenses for allocation
-  useEffect(() => {
-    async function fetchAllocationOptions() {
-      if (!user) return
-      
-      try {
-        const [goals, expenses] = await Promise.all([
-          getGoals(user.id),
-          getRecurringExpenses(user.id)
-        ])
-        
-        setAvailableGoals(goals.filter(g => g.status === 'active'))
-        setAvailableExpenses(expenses.filter(e => e.status === 'active'))
-      } catch (error) {
-        console.error('Error fetching allocation options:', error)
-      }
-    }
-
-    if (user) {
-      fetchAllocationOptions()
-    }
-  }, [user])
-
   // Fetch target calculation data
   useEffect(() => {
     async function fetchTargetData() {
@@ -88,8 +84,11 @@ export default function DailyInterface() {
       
       try {
         setTargetLoading(true)
-        const data = await calculateDailyTarget(user.id)
-        setTargetData(data)
+        const response = await fetch('/api/daily-target')
+        if (response.ok) {
+          const data = await response.json()
+          setTargetData(data)
+        }
       } catch (error) {
         console.error('Error fetching target data:', error)
       } finally {
@@ -103,10 +102,10 @@ export default function DailyInterface() {
   }, [user])
 
   // Show loading state
-  if (loading || !user) {
+  if (isLoading || !user) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-600 border-t-transparent"></div>
       </div>
     )
   }
@@ -119,33 +118,42 @@ export default function DailyInterface() {
     
     try {
       setSubmitting(true)
-      const newTransaction = await createTransaction({
-        user_id: user.id,
-        type,
-        amount,
-        description,
-        transaction_date: new Date().toISOString().split('T')[0],
-        transaction_time: new Date().toTimeString().split(' ')[0]
+      const response = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          amount,
+          description,
+          transaction_date: new Date().toISOString().split('T')[0],
+          transaction_time: new Date().toTimeString().split(' ')[0]
+        })
       })
       
-      setTransactions(prev => [newTransaction, ...prev])
-      
-      // Clear form
-      if (type === "income") {
-        setIncomeAmount("")
-        setIncomeDescription("")
-      } else {
-        setExpenseAmount("")
-        setExpenseDescription("")
-      }
+      if (response.ok) {
+        const newTransaction = await response.json()
+        setTransactions(prev => [newTransaction, ...prev])
+        
+        // Clear form
+        if (type === "income") {
+          setIncomeAmount("")
+          setIncomeDescription("")
+        } else {
+          setExpenseAmount("")
+          setExpenseDescription("")
+        }
 
-      // Refresh target data after adding transactions (income affects calculations)
-      if (type === "income") {
-        try {
-          const updatedTargetData = await calculateDailyTarget(user.id)
-          setTargetData(updatedTargetData)
-        } catch (error) {
-          console.error('Error refreshing target data:', error)
+        // Refresh target data after adding transactions
+        if (type === "income") {
+          try {
+            const targetResponse = await fetch('/api/daily-target')
+            if (targetResponse.ok) {
+              const updatedTargetData = await targetResponse.json()
+              setTargetData(updatedTargetData)
+            }
+          } catch (error) {
+            console.error('Error refreshing target data:', error)
+          }
         }
       }
     } catch (error) {
@@ -183,7 +191,7 @@ export default function DailyInterface() {
           <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-8 rounded-3xl mb-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div className="text-center">
-                <div className="w-16 h-16 bg-gradient-to-r from-indigo-400 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <DollarSign className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-3xl font-bold text-gray-800">${dailyTotal.toFixed(2)}</p>
@@ -191,7 +199,7 @@ export default function DailyInterface() {
               </div>
 
               <div className="text-center">
-                <div className={`w-16 h-16 bg-gradient-to-r ${isOnTrack ? 'from-green-400 to-emerald-500' : 'from-orange-400 to-red-500'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
+                <div className={`w-16 h-16 ${isOnTrack ? 'bg-green-500' : 'bg-orange-500'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
                   <Target className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-3xl font-bold text-gray-800">${dailyGoal.toFixed(2)}</p>
@@ -199,7 +207,7 @@ export default function DailyInterface() {
               </div>
 
               <div className="text-center">
-                <div className={`w-16 h-16 bg-gradient-to-r ${surplus >= 0 ? 'from-green-400 to-emerald-500' : 'from-red-400 to-pink-500'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
+                <div className={`w-16 h-16 ${surplus >= 0 ? 'bg-green-500' : 'bg-red-500'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
                   {surplus >= 0 ? <TrendingUp className="h-8 w-8 text-white" /> : <TrendingDown className="h-8 w-8 text-white" />}
                 </div>
                 <p className={`text-3xl font-bold ${surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -251,7 +259,7 @@ export default function DailyInterface() {
               </div>
               <div className="w-full bg-gray-200 rounded-full h-4">
                 <div
-                  className="bg-gradient-to-r from-indigo-500 to-blue-500 h-4 rounded-full transition-all duration-500 ease-out"
+                  className="bg-blue-600 h-4 rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
@@ -263,7 +271,7 @@ export default function DailyInterface() {
             {/* Add Income */}
             <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-4 rounded-2xl">
               <div className="flex items-center space-x-2 mb-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
                   <Plus className="h-4 w-4 text-white" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-800">Add Income</h3>
@@ -299,7 +307,7 @@ export default function DailyInterface() {
                 </div>
                 <Button
                   onClick={() => addTransaction("income")}
-                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm py-2"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-2"
                   disabled={!incomeAmount || !incomeDescription || submitting}
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -311,7 +319,7 @@ export default function DailyInterface() {
             {/* Add Expense */}
             <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-4 rounded-2xl">
               <div className="flex items-center space-x-2 mb-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-pink-600 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
                   <Minus className="h-4 w-4 text-white" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-800">Add Expense</h3>
@@ -347,7 +355,7 @@ export default function DailyInterface() {
                 </div>
                 <Button
                   onClick={() => addTransaction("expense")}
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm py-2"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white text-sm py-2"
                   disabled={!expenseAmount || !expenseDescription || submitting}
                 >
                   <Minus className="h-4 w-4 mr-2" />
@@ -398,8 +406,8 @@ export default function DailyInterface() {
                         <div
                           className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                             transaction.type === "income"
-                              ? "bg-gradient-to-r from-green-500 to-emerald-600"
-                              : "bg-gradient-to-r from-red-500 to-pink-600"
+                              ? "bg-green-500"
+                              : "bg-red-500"
                           }`}
                         >
                           {transaction.type === "income" ? (

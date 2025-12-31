@@ -9,7 +9,21 @@ import { Calendar, DollarSign, Plus, Edit, Trash2, RefreshCw, List, Grid3X3 } fr
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
-import { createRecurringExpense, getRecurringExpenses, updateRecurringExpense, RecurringExpense } from "@/lib/database"
+
+interface RecurringExpense {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  amount: number
+  category: string
+  due_date: number
+  status: string
+  auto_pay: boolean
+  reminder_enabled: boolean
+  created_at: string
+  updated_at: string
+}
 
 export default function RecurringExpenses() {
   const { user } = useAuth()
@@ -32,15 +46,18 @@ export default function RecurringExpenses() {
   const totalMonthly = expenses.reduce((sum, expense) => sum + expense.amount, 0)
   const dailyImpact = totalMonthly / 30
 
-  // Load expenses from database
+  // Load expenses from API
   useEffect(() => {
     async function fetchExpenses() {
       if (!user) return
       
       try {
         setLoading(true)
-        const data = await getRecurringExpenses(user.id)
-        setExpenses(data)
+        const response = await fetch('/api/recurring')
+        if (response.ok) {
+          const data = await response.json()
+          setExpenses(data)
+        }
       } catch (error) {
         console.error('Error fetching expenses:', error)
       } finally {
@@ -58,20 +75,26 @@ export default function RecurringExpenses() {
     
     try {
       setSubmitting(true)
-      const expense = await createRecurringExpense({
-        user_id: user.id,
-        name: newExpense.name,
-        amount: parseFloat(newExpense.amount),
-        category: newExpense.category.toLowerCase() as RecurringExpense['category'],
-        due_date: parseInt(newExpense.dueDate),
-        description: null,
-        status: "active",
-        auto_pay: false,
-        reminder_enabled: true,
+      const response = await fetch('/api/recurring', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newExpense.name,
+          amount: parseFloat(newExpense.amount),
+          category: newExpense.category.toLowerCase(),
+          due_date: parseInt(newExpense.dueDate),
+          description: null,
+          status: "active",
+          auto_pay: false,
+          reminder_enabled: true,
+        })
       })
       
-      setExpenses(prev => [expense, ...prev])
-      setNewExpense({ name: "", amount: "", category: "", dueDate: "" })
+      if (response.ok) {
+        const expense = await response.json()
+        setExpenses(prev => [expense, ...prev])
+        setNewExpense({ name: "", amount: "", category: "", dueDate: "" })
+      }
     } catch (error) {
       console.error('Error creating expense:', error)
     } finally {
@@ -83,8 +106,15 @@ export default function RecurringExpenses() {
     if (!user || !confirm('Are you sure you want to delete this expense?')) return
     
     try {
-      await updateRecurringExpense(id, { status: 'cancelled' })
-      setExpenses(prev => prev.filter(expense => expense.id !== id))
+      const response = await fetch('/api/recurring', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'cancelled' })
+      })
+      
+      if (response.ok) {
+        setExpenses(prev => prev.filter(expense => expense.id !== id))
+      }
     } catch (error) {
       console.error('Error deleting expense:', error)
     }

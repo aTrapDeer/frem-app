@@ -2,13 +2,25 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
-import { getUserSettings, type UserSettings } from '@/lib/database'
 
 type User = {
   id: string
   name: string | null
   email: string
   image: string | null
+}
+
+type UserSettings = {
+  id: string
+  user_id: string
+  daily_budget_target: number
+  currency: string
+  preferred_language: string
+  notifications_enabled: boolean
+  dark_mode: boolean
+  weekly_summary_email: boolean
+  created_at: string
+  updated_at: string
 }
 
 type AuthContextType = {
@@ -38,14 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     image: session.user.image ?? null,
   } : null
 
-  // Fetch user settings when authenticated
+  // Fetch user settings when authenticated (via API route)
   useEffect(() => {
     async function fetchSettings() {
       if (session?.user?.id) {
         setIsLoadingSettings(true)
         try {
-          const settings = await getUserSettings(session.user.id as string)
-          setUserSettings(settings)
+          const response = await fetch('/api/user/settings')
+          if (response.ok) {
+            const settings = await response.json()
+            setUserSettings(settings)
+          }
         } catch (error) {
           console.error('Error fetching user settings:', error)
         } finally {
@@ -81,8 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUserSettings = async () => {
     if (session?.user?.id) {
       try {
-        const settings = await getUserSettings(session.user.id as string)
-        setUserSettings(settings)
+        const response = await fetch('/api/user/settings')
+        if (response.ok) {
+          const settings = await response.json()
+          setUserSettings(settings)
+        }
       } catch (error) {
         console.error('Error refreshing user settings:', error)
       }

@@ -1,17 +1,40 @@
-import { createClient } from '@libsql/client'
+import { createClient, Client } from '@libsql/client'
 
-if (!process.env.TURSO_DATABASE_URL) {
-  throw new Error('Missing TURSO_DATABASE_URL environment variable')
+// Only create the client on the server side
+let turso: Client | null = null
+
+function getTursoClient(): Client {
+  // Check if we're on the server
+  if (typeof window !== 'undefined') {
+    throw new Error('Turso client can only be used on the server side')
+  }
+  
+  if (!turso) {
+    if (!process.env.TURSO_DATABASE_URL) {
+      throw new Error('Missing TURSO_DATABASE_URL environment variable')
+    }
+
+    if (!process.env.TURSO_AUTH_TOKEN) {
+      throw new Error('Missing TURSO_AUTH_TOKEN environment variable')
+    }
+
+    turso = createClient({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    })
+  }
+  
+  return turso
 }
 
-if (!process.env.TURSO_AUTH_TOKEN) {
-  throw new Error('Missing TURSO_AUTH_TOKEN environment variable')
+// Export a proxy that lazily initializes the client
+export const db = {
+  execute: (...args: Parameters<Client['execute']>) => getTursoClient().execute(...args),
+  batch: (...args: Parameters<Client['batch']>) => getTursoClient().batch(...args),
 }
 
-export const turso = createClient({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-})
+// For backward compatibility, also export as turso
+export { db as turso }
 
 // Helper to generate UUIDs (since SQLite doesn't have gen_random_uuid())
 export function generateUUID(): string {
@@ -27,4 +50,3 @@ export function getCurrentTimestamp(): string {
 export function getCurrentDate(): string {
   return new Date().toISOString().split('T')[0]
 }
-

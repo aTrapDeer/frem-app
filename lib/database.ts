@@ -1,4 +1,4 @@
-import { turso, generateUUID, getCurrentTimestamp, getCurrentDate } from './turso'
+import { db, generateUUID, getCurrentTimestamp, getCurrentDate } from './turso'
 
 // Type definitions
 export type Transaction = {
@@ -199,7 +199,7 @@ function rowToUserSettings(row: Record<string, unknown>): UserSettings {
 // =============================================
 
 export const getUserSettings = async (userId: string): Promise<UserSettings | null> => {
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM user_settings WHERE user_id = ?',
     args: [userId]
   })
@@ -232,7 +232,7 @@ export const updateUserSettings = async (userId: string, updates: Partial<UserSe
   
   args.push(userId)
   
-  await turso.execute({
+  await db.execute({
     sql: `UPDATE user_settings SET ${fields.join(', ')} WHERE user_id = ?`,
     args
   })
@@ -251,7 +251,7 @@ export const createTransaction = async (transaction: Omit<Transaction, 'id' | 'c
   const now = getCurrentTimestamp()
   const today = getCurrentDate()
   
-  await turso.execute({
+  await db.execute({
     sql: `INSERT INTO daily_transactions (id, user_id, type, amount, description, category, transaction_date, transaction_time, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
@@ -268,7 +268,7 @@ export const createTransaction = async (transaction: Omit<Transaction, 'id' | 'c
     ]
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM daily_transactions WHERE id = ?',
     args: [id]
   })
@@ -287,7 +287,7 @@ export const getTransactions = async (userId: string, date?: string): Promise<Tr
   
   sql += ' ORDER BY transaction_time DESC'
   
-  const result = await turso.execute({ sql, args })
+  const result = await db.execute({ sql, args })
   return result.rows.map(row => rowToTransaction(row as Record<string, unknown>))
 }
 
@@ -315,12 +315,12 @@ export const updateTransaction = async (id: string, updates: Partial<Transaction
   
   args.push(id)
   
-  await turso.execute({
+  await db.execute({
     sql: `UPDATE daily_transactions SET ${fields.join(', ')} WHERE id = ?`,
     args
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM daily_transactions WHERE id = ?',
     args: [id]
   })
@@ -329,7 +329,7 @@ export const updateTransaction = async (id: string, updates: Partial<Transaction
 }
 
 export const deleteTransaction = async (id: string): Promise<void> => {
-  await turso.execute({
+  await db.execute({
     sql: 'DELETE FROM daily_transactions WHERE id = ?',
     args: [id]
   })
@@ -343,7 +343,7 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
   const id = generateUUID()
   const now = getCurrentTimestamp()
   
-  await turso.execute({
+  await db.execute({
     sql: `INSERT INTO financial_goals (id, user_id, title, description, target_amount, current_amount, category, deadline, priority, status, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
@@ -362,7 +362,7 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
     ]
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM financial_goals WHERE id = ?',
     args: [id]
   })
@@ -371,7 +371,7 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
 }
 
 export const getGoals = async (userId: string): Promise<Goal[]> => {
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM financial_goals WHERE user_id = ? ORDER BY created_at DESC',
     args: [userId]
   })
@@ -423,12 +423,12 @@ export const updateGoal = async (id: string, updates: Partial<Goal>): Promise<Go
   
   args.push(id)
   
-  await turso.execute({
+  await db.execute({
     sql: `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = ?`,
     args
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM financial_goals WHERE id = ?',
     args: [id]
   })
@@ -437,7 +437,7 @@ export const updateGoal = async (id: string, updates: Partial<Goal>): Promise<Go
 }
 
 export const deleteGoal = async (id: string): Promise<void> => {
-  await turso.execute({
+  await db.execute({
     sql: 'DELETE FROM financial_goals WHERE id = ?',
     args: [id]
   })
@@ -451,7 +451,7 @@ export const createRecurringExpense = async (expense: Omit<RecurringExpense, 'id
   const id = generateUUID()
   const now = getCurrentTimestamp()
   
-  await turso.execute({
+  await db.execute({
     sql: `INSERT INTO recurring_expenses (id, user_id, name, description, amount, category, due_date, status, auto_pay, reminder_enabled, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
@@ -470,7 +470,7 @@ export const createRecurringExpense = async (expense: Omit<RecurringExpense, 'id
     ]
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM recurring_expenses WHERE id = ?',
     args: [id]
   })
@@ -479,7 +479,7 @@ export const createRecurringExpense = async (expense: Omit<RecurringExpense, 'id
 }
 
 export const getRecurringExpenses = async (userId: string): Promise<RecurringExpense[]> => {
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM recurring_expenses WHERE user_id = ? AND status = ? ORDER BY due_date ASC',
     args: [userId, 'active']
   })
@@ -527,12 +527,12 @@ export const updateRecurringExpense = async (id: string, updates: Partial<Recurr
   
   args.push(id)
   
-  await turso.execute({
+  await db.execute({
     sql: `UPDATE recurring_expenses SET ${fields.join(', ')} WHERE id = ?`,
     args
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM recurring_expenses WHERE id = ?',
     args: [id]
   })
@@ -541,7 +541,7 @@ export const updateRecurringExpense = async (id: string, updates: Partial<Recurr
 }
 
 export const deleteRecurringExpense = async (id: string): Promise<void> => {
-  await turso.execute({
+  await db.execute({
     sql: 'DELETE FROM recurring_expenses WHERE id = ?',
     args: [id]
   })
@@ -555,7 +555,7 @@ export const createSideProject = async (project: Omit<SideProject, 'id' | 'creat
   const id = generateUUID()
   const now = getCurrentTimestamp()
   
-  await turso.execute({
+  await db.execute({
     sql: `INSERT INTO side_projects (id, user_id, name, description, category, status, current_monthly_earnings, projected_monthly_earnings, time_invested_weekly, start_date, end_date, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
@@ -575,7 +575,7 @@ export const createSideProject = async (project: Omit<SideProject, 'id' | 'creat
     ]
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM side_projects WHERE id = ?',
     args: [id]
   })
@@ -584,7 +584,7 @@ export const createSideProject = async (project: Omit<SideProject, 'id' | 'creat
 }
 
 export const getSideProjects = async (userId: string): Promise<SideProject[]> => {
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM side_projects WHERE user_id = ? ORDER BY created_at DESC',
     args: [userId]
   })
@@ -636,12 +636,12 @@ export const updateSideProject = async (id: string, updates: Partial<SideProject
   
   args.push(id)
   
-  await turso.execute({
+  await db.execute({
     sql: `UPDATE side_projects SET ${fields.join(', ')} WHERE id = ?`,
     args
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM side_projects WHERE id = ?',
     args: [id]
   })
@@ -650,7 +650,7 @@ export const updateSideProject = async (id: string, updates: Partial<SideProject
 }
 
 export const deleteSideProject = async (id: string): Promise<void> => {
-  await turso.execute({
+  await db.execute({
     sql: 'DELETE FROM side_projects WHERE id = ?',
     args: [id]
   })
@@ -664,7 +664,7 @@ export const createMilestone = async (milestone: Omit<Milestone, 'id' | 'created
   const id = generateUUID()
   const now = getCurrentTimestamp()
   
-  await turso.execute({
+  await db.execute({
     sql: `INSERT INTO financial_milestones (id, user_id, title, description, target_amount, current_amount, category, priority, status, impact_level, deadline, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
@@ -684,7 +684,7 @@ export const createMilestone = async (milestone: Omit<Milestone, 'id' | 'created
     ]
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM financial_milestones WHERE id = ?',
     args: [id]
   })
@@ -693,7 +693,7 @@ export const createMilestone = async (milestone: Omit<Milestone, 'id' | 'created
 }
 
 export const getMilestones = async (userId: string): Promise<Milestone[]> => {
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM financial_milestones WHERE user_id = ? ORDER BY deadline ASC',
     args: [userId]
   })
@@ -749,12 +749,12 @@ export const updateMilestone = async (id: string, updates: Partial<Milestone>): 
   
   args.push(id)
   
-  await turso.execute({
+  await db.execute({
     sql: `UPDATE financial_milestones SET ${fields.join(', ')} WHERE id = ?`,
     args
   })
   
-  const result = await turso.execute({
+  const result = await db.execute({
     sql: 'SELECT * FROM financial_milestones WHERE id = ?',
     args: [id]
   })
@@ -763,7 +763,7 @@ export const updateMilestone = async (id: string, updates: Partial<Milestone>): 
 }
 
 export const deleteMilestone = async (id: string): Promise<void> => {
-  await turso.execute({
+  await db.execute({
     sql: 'DELETE FROM financial_milestones WHERE id = ?',
     args: [id]
   })

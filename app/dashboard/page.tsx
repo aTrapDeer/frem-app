@@ -7,7 +7,6 @@ import { Navbar } from "@/components/navbar"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
-import { getDashboardData } from "@/lib/database"
 import { formatCurrency } from "@/lib/utils"
 import { DollarSign, Target, CreditCard, Zap } from "lucide-react"
 
@@ -37,26 +36,32 @@ interface QuickStatCardProps {
 }
 
 export default function DashboardPage() {
-  const { user, userSettings, loading } = useAuth()
+  const { user, userSettings, isLoading } = useAuth()
   const router = useRouter()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
 
   // Redirect unauthenticated users
   useEffect(() => {
-    if (!loading && !user) {
+    if (!isLoading && !user) {
       router.push('/')
     }
-  }, [user, loading, router])
+  }, [user, isLoading, router])
 
-  // Fetch dashboard data
+  // Fetch dashboard data from API
   useEffect(() => {
     async function fetchDashboard() {
       if (!user) return
       
       try {
         setDataLoading(true)
-        const data = await getDashboardData(user.id)
+        const response = await fetch('/api/dashboard')
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch dashboard data')
+        }
+        
+        const data = await response.json()
         setDashboardData(data)
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
@@ -71,10 +76,10 @@ export default function DashboardPage() {
   }, [user])
 
   // Show loading state
-  if (loading || !user) {
+  if (isLoading || !user) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-600 border-t-transparent"></div>
       </div>
     )
   }
@@ -164,7 +169,7 @@ export default function DashboardPage() {
             <Card className="glass-card card-lift">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                     <Zap className="h-4 w-4 text-white" />
                   </div>
                   <span>Quick Actions</span>
@@ -201,7 +206,7 @@ export default function DashboardPage() {
                     variant="outline"
                     className="h-auto p-4 flex flex-col items-center space-y-2 bg-transparent"
                   >
-                    <CreditCard className="h-6 w-6 text-purple-600" />
+                    <CreditCard className="h-6 w-6 text-cyan-600" />
                     <div className="text-center">
                       <div className="font-semibold">Manage Expenses</div>
                       <div className="text-xs text-slate-600">Recurring payments</div>
@@ -242,7 +247,7 @@ function KPICard({ title, icon: Icon, current, target, isPercentage, index }: KP
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.min((current / target) * 100, 100)}%` }}
                   transition={{ duration: 1, delay: 0.5 }}
-                  className="bg-gradient-to-r from-indigo-500 to-fuchsia-600 h-2 rounded-full"
+                  className="bg-blue-600 h-2 rounded-full"
                 />
               </div>
               <p className="text-xs text-slate-600 mt-1">{Math.round((current / target) * 100)}% of target</p>
