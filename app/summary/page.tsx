@@ -96,7 +96,15 @@ export default function SummaryPage() {
         if (!summaryRes.ok) throw new Error('Failed to fetch summary data')
         
         const data = await summaryRes.json()
-        const { milestones: milestonesData, targetCalculation, incomeSummary: incomeSummaryData } = data
+        const { 
+          milestones: milestonesData, 
+          goals: goalsData, 
+          recurringExpenses: recurringExpensesData, 
+          sideProjects: sideProjectsData, 
+          transactions: recentTransactionsData, 
+          targetCalculation, 
+          incomeSummary: incomeSummaryData 
+        } = data
         
         setMilestones(milestonesData)
         setTargetData(targetCalculation)
