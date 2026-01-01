@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { ArrowRight, ArrowLeft, Target, Edit, Trash2 } from "lucide-react"
+import { ArrowRight, ArrowLeft, Target, Edit, Trash2, TrendingUp, Calendar, AlertTriangle, CheckCircle2, Clock, Info } from "lucide-react"
 import { SideProjects } from "@/components/side-projects"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -21,9 +21,19 @@ const goalSchema = z.object({
   amount: z.number().min(1, "Amount must be greater than 0"),
   deadline: z.string().min(1, "Deadline is required"),
   category: z.enum(["emergency", "vacation", "car", "house", "debt", "investment", "other"]),
+  urgency_score: z.number().min(1).max(5).default(3),
 })
 
 type GoalFormData = z.infer<typeof goalSchema>
+
+// Urgency labels
+const urgencyLevels = [
+  { value: 1, label: 'Low', description: 'Nice to have, flexible timeline', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+  { value: 2, label: 'Medium-Low', description: 'Important but not urgent', color: 'bg-blue-100 text-blue-600 border-blue-200' },
+  { value: 3, label: 'Medium', description: 'Balanced priority', color: 'bg-amber-100 text-amber-600 border-amber-200' },
+  { value: 4, label: 'High', description: 'Important, should complete soon', color: 'bg-orange-100 text-orange-600 border-orange-200' },
+  { value: 5, label: 'Urgent', description: 'Top priority, pay off first', color: 'bg-red-100 text-red-600 border-red-200' },
+]
 
 interface Goal {
   id: string
@@ -33,24 +43,59 @@ interface Goal {
   deadline: string
   category: string
   status: string
+  urgency_score: number // 1-5, higher = more urgent
+}
+
+interface GoalProjection {
+  goalId: string
+  title: string
+  targetAmount: number
+  currentAmount: number
+  projectedAmount: number
+  totalProjectedProgress: number
+  progressPercentage: number
+  monthlyAllocation: number
+  urgencyScore: number
+  originalDeadline: string
+  projectedCompletionDate: string
+  daysUntilProjectedCompletion: number
+  isOnTrack: boolean
+  daysAheadOrBehind: number
+  status: 'on_track' | 'ahead' | 'behind' | 'at_risk' | 'completed'
+  category: string
+}
+
+interface ProjectionSummary {
+  goals: GoalProjection[]
+  totalMonthlyIncome: number
+  totalMonthlyExpenses: number
+  monthlySurplus: number
+  surplusAllocatedToGoals: number
+  hasVariableIncome: boolean
+  scenarios?: {
+    conservative: GoalProjection[]
+    expected: GoalProjection[]
+    optimistic: GoalProjection[]
+  }
 }
 
 export default function GoalsPage() {
   const { user } = useAuth()
   const [step, setStep] = useState(1)
   const [goals, setGoals] = useState<Goal[]>([])
+  const [projections, setProjections] = useState<ProjectionSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
+  const [showProjectionInfo, setShowProjectionInfo] = useState(false)
 
   const {
     register,
     handleSubmit,
     formState: { errors, isValid },
     reset,
-    watch,
-    getValues
+    watch
   } = useForm<GoalFormData>({
     resolver: zodResolver(goalSchema),
     mode: "onChange",
@@ -59,29 +104,43 @@ export default function GoalsPage() {
   // Watch form values for step navigation
   const watchedValues = watch()
 
-  // Load goals from API
+  // Load goals and projections from API
   useEffect(() => {
-    async function fetchGoals() {
+    async function fetchData() {
       if (!user) return
       
       try {
         setLoading(true)
-        const response = await fetch('/api/goals')
-        if (response.ok) {
-          const data = await response.json()
-          setGoals(data)
+        const [goalsRes, projectionsRes] = await Promise.all([
+          fetch('/api/goals'),
+          fetch('/api/projections')
+        ])
+        
+        if (goalsRes.ok) {
+          const goalsData = await goalsRes.json()
+          setGoals(goalsData)
+        }
+        
+        if (projectionsRes.ok) {
+          const projectionsData = await projectionsRes.json()
+          setProjections(projectionsData)
         }
       } catch (error) {
-        console.error('Error fetching goals:', error)
+        console.error('Error fetching data:', error)
       } finally {
         setLoading(false)
       }
     }
 
     if (user) {
-      fetchGoals()
+      fetchData()
     }
   }, [user])
+  
+  // Helper to get projection for a specific goal
+  const getProjection = (goalId: string): GoalProjection | undefined => {
+    return projections?.goals.find(p => p.goalId === goalId)
+  }
 
   const onSubmit = async (data: GoalFormData) => {
     if (!user) return
@@ -98,6 +157,7 @@ export default function GoalsPage() {
           current_amount: 0,
           deadline: data.deadline,
           category: data.category,
+          urgency_score: data.urgency_score || 3,
           status: 'active',
           priority: 'medium'
         })
@@ -109,6 +169,12 @@ export default function GoalsPage() {
         reset()
         setStep(1)
         setSuccessMessage(`Great! "${data.title}" goal has been created successfully.`)
+        
+        // Refresh projections
+        const projectionsRes = await fetch('/api/projections')
+        if (projectionsRes.ok) {
+          setProjections(await projectionsRes.json())
+        }
       }
       
       // Clear success message after 5 seconds
@@ -134,7 +200,8 @@ export default function GoalsPage() {
           title: updates.title,
           target_amount: updates.amount,
           deadline: updates.deadline,
-          category: updates.category
+          category: updates.category,
+          urgency_score: updates.urgency_score
         })
       })
       
@@ -145,6 +212,12 @@ export default function GoalsPage() {
         ))
         setEditingGoal(null)
         setSuccessMessage("Goal updated successfully!")
+        
+        // Refresh projections
+        const projectionsRes = await fetch('/api/projections')
+        if (projectionsRes.ok) {
+          setProjections(await projectionsRes.json())
+        }
       }
       
       // Clear success message after 5 seconds
@@ -153,6 +226,32 @@ export default function GoalsPage() {
       console.error('Error updating goal:', error)
     } finally {
       setSubmitting(false)
+    }
+  }
+  
+  // Quick update urgency score without opening full modal
+  const handleQuickUrgencyUpdate = async (goalId: string, newScore: number) => {
+    try {
+      const response = await fetch('/api/goals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: goalId, urgency_score: newScore })
+      })
+      
+      if (response.ok) {
+        const updatedGoal = await response.json()
+        setGoals(prev => prev.map(goal => 
+          goal.id === goalId ? updatedGoal : goal
+        ))
+        
+        // Refresh projections
+        const projectionsRes = await fetch('/api/projections')
+        if (projectionsRes.ok) {
+          setProjections(await projectionsRes.json())
+        }
+      }
+    } catch (error) {
+      console.error('Error updating urgency:', error)
     }
   }
 
@@ -176,7 +275,7 @@ export default function GoalsPage() {
     }
   }
 
-  const totalSteps = 3
+  const totalSteps = 4
   const progress = (step / totalSteps) * 100
 
   return (
@@ -190,6 +289,86 @@ export default function GoalsPage() {
             <h1 className="text-4xl font-bold text-slate-900 mb-2">Financial Goals</h1>
             <p className="text-slate-600">Set targets and track your progress</p>
           </motion.div>
+
+          {/* Projection Summary Banner */}
+          {projections && projections.monthlySurplus > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <Card className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp className="h-5 w-5 text-blue-600" />
+                        <h3 className="font-semibold text-slate-900">Goal Projections Active</h3>
+                        <button
+                          onClick={() => setShowProjectionInfo(!showProjectionInfo)}
+                          className={`p-1 rounded-full transition-colors ${showProjectionInfo ? 'bg-blue-100 text-blue-600' : 'hover:bg-blue-100 text-slate-500'}`}
+                        >
+                          <Info className="h-4 w-4" />
+                        </button>
+                        {projections.hasVariableIncome && (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                            Variable Income
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        Your <span className="font-medium text-green-600">${projections.monthlySurplus.toLocaleString()}/mo</span> surplus is automatically allocated to your goals
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-slate-900">${projections.totalMonthlyIncome.toLocaleString()}</div>
+                      <div className="text-xs text-slate-500">monthly income</div>
+                    </div>
+                  </div>
+                  
+                  <AnimatePresence>
+                    {showProjectionInfo && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-4 p-4 bg-white rounded-lg border border-blue-100">
+                          <h4 className="font-medium text-slate-800 mb-2 flex items-center gap-1.5">
+                            <Info className="h-4 w-4 text-blue-500" />
+                            How Projections Work
+                          </h4>
+                          <div className="text-sm text-slate-600 space-y-2">
+                            <p>
+                              <strong>1. Income Analysis:</strong> We calculate your total monthly income from all sources 
+                              (${projections.totalMonthlyIncome.toLocaleString()})
+                            </p>
+                            <p>
+                              <strong>2. Expense Deduction:</strong> Your recurring expenses (${projections.totalMonthlyExpenses.toLocaleString()}) are subtracted
+                            </p>
+                            <p>
+                              <strong>3. Surplus Allocation:</strong> The remaining ${projections.monthlySurplus.toLocaleString()}/mo is proportionally 
+                              distributed across your goals based on how much each goal needs
+                            </p>
+                            <p>
+                              <strong>4. Timeline Projection:</strong> We estimate when each goal will be completed at this rate
+                            </p>
+                            {projections.hasVariableIncome && (
+                              <p className="text-amber-700 bg-amber-50 p-2 rounded">
+                                <strong>⚠️ Variable Income:</strong> Since you have commission-based income, projections use your 
+                                &quot;safe average&quot; estimate. Actual results may vary.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Existing Goals */}
@@ -221,9 +400,11 @@ export default function GoalsPage() {
                   <GoalCard 
                     key={goal.id} 
                     goal={goal} 
+                    projection={getProjection(goal.id)}
                     index={index}
                     onEdit={setEditingGoal}
                     onDelete={handleDeleteGoal}
+                    onUrgencyChange={handleQuickUrgencyUpdate}
                   />
                 ))
               )}
@@ -291,15 +472,110 @@ export default function GoalsPage() {
   )
 }
 
+interface GoalBreakdown {
+  goal: Goal
+  contributions: {
+    all: Array<{
+      id: string
+      amount: number
+      contribution_date: string
+      description: string | null
+      source: string
+    }>
+    manual: Array<{ id: string; amount: number; contribution_date: string; description: string | null }>
+    oneTime: Array<{ id: string; amount: number; contribution_date: string; description: string | null }>
+    totalManual: number
+    totalOneTime: number
+  }
+  appliedIncomes: Array<{
+    id: string
+    amount: number
+    description: string
+    source: string
+    income_date: string
+  }>
+  summary: {
+    targetAmount: number
+    currentAmount: number
+    remaining: number
+    monthsRemaining: number
+    monthlyRequired: number
+    deadline: string
+    progressPercent: number
+  }
+  paymentSchedule: Array<{
+    date: string
+    month: string
+    expectedContribution: number
+    runningTotal: number
+    progressPercent: number
+  }>
+}
+
 interface GoalCardProps {
   goal: Goal
+  projection?: GoalProjection
   index: number
   onEdit: (goal: Goal) => void
   onDelete: (goalId: string) => void
+  onUrgencyChange: (goalId: string, newScore: number) => void
 }
 
-function GoalCard({ goal, index, onEdit, onDelete }: GoalCardProps) {
-  const progress = goal.target_amount > 0 ? (goal.current_amount / goal.target_amount) * 100 : 0
+function GoalCard({ goal, projection, index, onEdit, onDelete, onUrgencyChange }: GoalCardProps) {
+  const [showBreakdown, setShowBreakdown] = useState(false)
+  const [breakdown, setBreakdown] = useState<GoalBreakdown | null>(null)
+  const [loadingBreakdown, setLoadingBreakdown] = useState(false)
+
+  const manualProgress = goal.target_amount > 0 ? (goal.current_amount / goal.target_amount) * 100 : 0
+  const projectedProgress = projection?.progressPercentage || manualProgress
+  const urgency = goal.urgency_score || 3
+  
+  // Get urgency level info
+  const urgencyInfo = urgencyLevels.find(u => u.value === urgency) || urgencyLevels[2]
+
+  const fetchBreakdown = async () => {
+    if (breakdown) {
+      setShowBreakdown(true)
+      return
+    }
+    
+    setLoadingBreakdown(true)
+    try {
+      const response = await fetch(`/api/goals/${goal.id}/breakdown`)
+      if (response.ok) {
+        const data = await response.json()
+        setBreakdown(data)
+        setShowBreakdown(true)
+      }
+    } catch (error) {
+      console.error('Error fetching breakdown:', error)
+    } finally {
+      setLoadingBreakdown(false)
+    }
+  }
+  
+  // Status badge styling
+  const getStatusBadge = () => {
+    if (!projection) return null
+    
+    const badges = {
+      completed: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: 'Completed!' },
+      ahead: { bg: 'bg-blue-100', text: 'text-blue-700', icon: TrendingUp, label: `${projection.daysAheadOrBehind}d ahead` },
+      on_track: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: 'On Track' },
+      behind: { bg: 'bg-amber-100', text: 'text-amber-700', icon: Clock, label: `${Math.abs(projection.daysAheadOrBehind)}d behind` },
+      at_risk: { bg: 'bg-red-100', text: 'text-red-700', icon: AlertTriangle, label: 'At Risk' }
+    }
+    
+    const badge = badges[projection.status]
+    const Icon = badge.icon
+    
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${badge.bg} ${badge.text}`}>
+        <Icon className="h-3 w-3" />
+        {badge.label}
+      </span>
+    )
+  }
 
   return (
     <motion.div
@@ -313,51 +589,357 @@ function GoalCard({ goal, index, onEdit, onDelete }: GoalCardProps) {
             <div className="flex-1">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">{goal.title}</h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-lg font-bold text-slate-900">{goal.title}</h3>
+                    {getStatusBadge()}
+                  </div>
                   <p className="text-sm text-slate-600 capitalize">{goal.category}</p>
                 </div>
-                <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => onEdit(goal)}
-                    className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
-                    title="Edit goal"
+                    onClick={fetchBreakdown}
+                    disabled={loadingBreakdown}
+                    className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                    title="View breakdown & payment schedule"
                   >
-                    <Edit className="h-4 w-4 text-slate-600" />
+                    {loadingBreakdown ? (
+                      <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Info className="h-4 w-4 text-blue-500" />
+                    )}
                   </button>
-                  <button
-                    onClick={() => onDelete(goal.id)}
-                    className="p-2 rounded-lg hover:bg-red-50 transition-colors"
-                    title="Delete goal"
-                  >
-                    <Trash2 className="h-4 w-4 text-red-600" />
-                  </button>
+                  <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => onEdit(goal)}
+                      className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                      title="Edit goal"
+                    >
+                      <Edit className="h-4 w-4 text-slate-600" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(goal.id)}
+                      className="p-2 rounded-lg hover:bg-red-50 transition-colors"
+                      title="Delete goal"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </button>
+                  </div>
                 </div>
               </div>
+              
+              {/* Amount display - show projected vs manual */}
               <div className="text-right mt-2">
-                <p className="text-2xl font-bold font-numbers text-slate-900">${goal.current_amount.toLocaleString()}</p>
-                <p className="text-sm text-slate-600">of ${goal.target_amount.toLocaleString()}</p>
+                {projection ? (
+                  <>
+                    <p className="text-2xl font-bold font-numbers text-slate-900">
+                      ${projection.totalProjectedProgress.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      of ${goal.target_amount.toLocaleString()}
+                      {goal.current_amount > 0 && (
+                        <span className="text-xs text-slate-400 ml-1">
+                          (${goal.current_amount.toLocaleString()} saved + ${projection.projectedAmount.toLocaleString()} projected)
+                        </span>
+                      )}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold font-numbers text-slate-900">${goal.current_amount.toLocaleString()}</p>
+                    <p className="text-sm text-slate-600">of ${goal.target_amount.toLocaleString()}</p>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
+          {/* Progress Bar */}
           <div className="space-y-2">
-            <Progress value={progress} />
+            <div className="relative">
+              {/* Background bar */}
+              <Progress value={projectedProgress} className="h-3" />
+              {/* Manual progress indicator (if different from projected) */}
+              {projection && goal.current_amount > 0 && manualProgress < projectedProgress && (
+                <div 
+                  className="absolute top-0 left-0 h-3 bg-green-600 rounded-full transition-all"
+                  style={{ width: `${manualProgress}%` }}
+                />
+              )}
+            </div>
+            
             <div className="flex justify-between text-sm text-slate-600">
-              <span>{Math.round(progress)}% complete</span>
+              <span>{Math.round(projectedProgress)}% {projection ? 'projected' : 'complete'}</span>
               <span>Due {new Date(goal.deadline).toLocaleDateString()}</span>
             </div>
           </div>
+          
+          {/* Urgency Control */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-slate-500">Priority</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${urgencyInfo.color}`}>
+                {urgencyInfo.label}
+              </span>
+            </div>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((level) => {
+                const levelInfo = urgencyLevels.find(u => u.value === level)!
+                const isActive = level <= urgency
+                return (
+                  <button
+                    key={level}
+                    onClick={() => onUrgencyChange(goal.id, level)}
+                    className={`flex-1 h-2 rounded-full transition-all ${
+                      isActive 
+                        ? level <= 2 ? 'bg-slate-400' 
+                          : level === 3 ? 'bg-amber-400'
+                          : level === 4 ? 'bg-orange-400'
+                          : 'bg-red-500'
+                        : 'bg-slate-200 hover:bg-slate-300'
+                    }`}
+                    title={`${levelInfo.label}: ${levelInfo.description}`}
+                  />
+                )
+              })}
+            </div>
+            <p className="text-xs text-slate-400 mt-1 text-center">{urgencyInfo.description}</p>
+          </div>
+
+          {/* Projection details */}
+          {projection && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-slate-400" />
+                  <div>
+                    <p className="text-slate-500 text-xs">Est. Completion</p>
+                    <p className="font-medium text-slate-900">
+                      {new Date(projection.projectedCompletionDate).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: projection.daysUntilProjectedCompletion > 365 ? 'numeric' : undefined
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-slate-400" />
+                  <div>
+                    <p className="text-slate-500 text-xs">Monthly Allocation</p>
+                    <p className="font-medium text-green-600">+${projection.monthlyAllocation.toLocaleString()}/mo</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Breakdown Modal */}
+      <AnimatePresence>
+        {showBreakdown && breakdown && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowBreakdown(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 32 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 32 }}
+              className="w-full max-w-lg bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <Info className="h-5 w-5 text-blue-500" />
+                    Goal Breakdown
+                  </h2>
+                  <button
+                    onClick={() => setShowBreakdown(false)}
+                    className="p-2 rounded-lg hover:bg-white/50 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <h3 className="text-lg text-slate-700">{breakdown.goal.title}</h3>
+              </div>
+
+              <div className="overflow-y-auto max-h-[calc(90vh-200px)]">
+                {/* Progress Summary */}
+                <div className="p-6 border-b border-slate-100">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Progress Summary</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600">Target Amount</span>
+                      <span className="font-bold text-slate-900">${breakdown.summary.targetAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600">Current Progress</span>
+                      <span className="font-bold text-green-600">${breakdown.summary.currentAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600">Remaining</span>
+                      <span className="font-bold text-amber-600">${breakdown.summary.remaining.toLocaleString()}</span>
+                    </div>
+                    <Progress value={breakdown.summary.progressPercent} className="h-2" />
+                    <p className="text-center text-sm text-slate-500">
+                      {breakdown.summary.progressPercent}% complete • {breakdown.summary.monthsRemaining} months to deadline
+                    </p>
+                  </div>
+                </div>
+
+                {/* Contribution Breakdown */}
+                <div className="p-6 border-b border-slate-100">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Where Your Progress Comes From</h4>
+                  <div className="space-y-2">
+                    {breakdown.contributions.totalManual > 0 && (
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                            <Target className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900">Manual Contributions</p>
+                            <p className="text-xs text-slate-500">{breakdown.contributions.manual.length} contribution(s)</p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-green-600">+${breakdown.contributions.totalManual.toLocaleString()}</span>
+                      </div>
+                    )}
+                    
+                    {breakdown.contributions.totalOneTime > 0 && (
+                      <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
+                            <TrendingUp className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900">One-Time Income Applied</p>
+                            <p className="text-xs text-slate-500">{breakdown.appliedIncomes.length} income(s) applied</p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-amber-600">+${breakdown.contributions.totalOneTime.toLocaleString()}</span>
+                      </div>
+                    )}
+
+                    {projection && (
+                      <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                            <Calendar className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900">Projected Allocation</p>
+                            <p className="text-xs text-slate-500">From monthly surplus</p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-blue-600">+${projection.monthlyAllocation.toLocaleString()}/mo</span>
+                      </div>
+                    )}
+
+                    {breakdown.summary.currentAmount === 0 && !projection && (
+                      <div className="text-center py-4 text-slate-500">
+                        <p>No contributions yet. Add income or set up automatic allocations.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Applied One-Time Incomes Detail */}
+                {breakdown.appliedIncomes.length > 0 && (
+                  <div className="p-6 border-b border-slate-100">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Applied One-Time Income Details</h4>
+                    <div className="space-y-2">
+                      {breakdown.appliedIncomes.map((income) => (
+                        <div key={income.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
+                          <div>
+                            <p className="font-medium text-slate-900">{income.description}</p>
+                            <p className="text-xs text-slate-500">
+                              {income.source} • {new Date(income.income_date).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span className="font-bold text-green-600">+${income.amount.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expected Payment Schedule */}
+                <div className="p-6">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Expected Payment Schedule
+                  </h4>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Based on your monthly allocation of ${breakdown.summary.monthlyRequired.toLocaleString()}
+                  </p>
+                  <div className="space-y-2">
+                    {breakdown.paymentSchedule.map((payment, idx) => (
+                      <div 
+                        key={`${payment.date}-${idx}`} 
+                        className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100"
+                      >
+                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-slate-900">{payment.month}</span>
+                            <span className="text-green-600 font-medium">+${payment.expectedContribution.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-slate-200 rounded-full h-1.5">
+                              <div 
+                                className="h-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all"
+                                style={{ width: `${payment.progressPercent}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500 w-20 text-right">
+                              ${payment.runningTotal.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {breakdown.summary.monthsRemaining > 6 && (
+                      <p className="text-center text-sm text-slate-400 pt-2">
+                        + {breakdown.summary.monthsRemaining - 6} more months until deadline
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-200 bg-slate-50">
+                <p className="text-xs text-center text-slate-500">
+                  Deadline: {new Date(breakdown.summary.deadline).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
 
 interface GoalWizardStepProps {
   step: number
-  register: any
-  errors: any
-  watchedValues: any
+  register: ReturnType<typeof import('react-hook-form').useForm>['register']
+  errors: Record<string, { message?: string }>
+  watchedValues: Record<string, string | number | undefined>
   onNext: () => void
   onPrev: () => void
   isValid: boolean
@@ -370,7 +952,7 @@ function GoalWizardStep({ step, register, errors, watchedValues, onNext, onPrev,
       return (
         <div className="space-y-4">
           <div>
-            <Label htmlFor="title">What's your goal?</Label>
+            <Label htmlFor="title">What&apos;s your goal?</Label>
             <Input
               id="title"
               placeholder="e.g., Emergency Fund, New Car, Vacation to Europe"
@@ -511,6 +1093,80 @@ function GoalWizardStep({ step, register, errors, watchedValues, onNext, onPrev,
               <ArrowLeft className="mr-2 h-4 w-4" /> Previous
             </Button>
             <Button 
+              type="button" 
+              onClick={onNext}
+              disabled={!watchedValues.deadline}
+            >
+              Next <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )
+
+    case 4:
+      return (
+        <div className="space-y-4">
+          <div>
+            <Label>How urgent is this goal?</Label>
+            <p className="text-xs text-slate-500 mb-3">
+              Higher priority goals get more of your monthly surplus allocation
+            </p>
+            
+            <div className="space-y-2">
+              {urgencyLevels.map((level) => (
+                <label
+                  key={level.value}
+                  className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${
+                    watchedValues.urgency_score === level.value 
+                      ? level.color + ' border-2' 
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    value={level.value}
+                    {...register("urgency_score", { valueAsNumber: true })}
+                    className="sr-only"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium">{level.label}</div>
+                    <div className="text-xs text-slate-500">{level.description}</div>
+                  </div>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div 
+                        key={i} 
+                        className={`w-2 h-4 rounded-full ${
+                          i <= level.value 
+                            ? i <= 2 ? 'bg-slate-400' 
+                              : i === 3 ? 'bg-amber-400'
+                              : i === 4 ? 'bg-orange-400'
+                              : 'bg-red-500'
+                            : 'bg-slate-200'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {watchedValues.urgency_score && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                💡 <strong>How this works:</strong> Goals with higher urgency receive a larger share of your monthly surplus. 
+                A &quot;{urgencyLevels.find(l => l.value === watchedValues.urgency_score)?.label}&quot; goal will get 
+                {watchedValues.urgency_score === 5 ? ' the maximum' : watchedValues.urgency_score === 1 ? ' the minimum' : ' a proportional'} allocation.
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-between">
+            <Button type="button" variant="outline" onClick={onPrev}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+            </Button>
+            <Button 
               type="submit" 
               disabled={!isValid || submitting}
               className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -538,7 +1194,8 @@ function EditGoalModal({ goal, onSave, onCancel, submitting }: EditGoalModalProp
     title: goal.title,
     amount: goal.target_amount.toString(),
     deadline: goal.deadline,
-    category: goal.category as GoalFormData['category']
+    category: goal.category as GoalFormData['category'],
+    urgency_score: goal.urgency_score || 3
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -550,7 +1207,8 @@ function EditGoalModal({ goal, onSave, onCancel, submitting }: EditGoalModalProp
       title: editData.title,
       amount: amount,
       deadline: editData.deadline,
-      category: editData.category
+      category: editData.category,
+      urgency_score: editData.urgency_score
     })
   }
 
@@ -634,6 +1292,30 @@ function EditGoalModal({ goal, onSave, onCancel, submitting }: EditGoalModalProp
                 <option value="investment">📈 Investment & Savings</option>
                 <option value="other">🎯 Other Goal</option>
               </select>
+            </div>
+
+            <div>
+              <Label>Priority</Label>
+              <p className="text-xs text-slate-500 mb-2">Higher priority = more allocation</p>
+              <div className="flex gap-2">
+                {urgencyLevels.map((level) => (
+                  <button
+                    key={level.value}
+                    type="button"
+                    onClick={() => setEditData({ ...editData, urgency_score: level.value })}
+                    className={`flex-1 py-2 px-1 rounded-lg text-xs font-medium transition-all border ${
+                      editData.urgency_score === level.value 
+                        ? level.color + ' border-2' 
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    {level.value}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-center mt-1 text-slate-500">
+                {urgencyLevels.find(l => l.value === editData.urgency_score)?.label}
+              </p>
             </div>
 
             <div className="flex space-x-3 pt-4">

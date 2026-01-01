@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { getGoals, createGoal, updateGoal, Goal } from '@/lib/database'
+import { getGoals, createGoal, updateGoal } from '@/lib/database'
 
 export async function GET() {
   try {

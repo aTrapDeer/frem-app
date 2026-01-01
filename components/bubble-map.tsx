@@ -1,10 +1,9 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { Slider } from "@/components/ui/slider"
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -21,7 +20,6 @@ import {
   Move,
   RotateCcw
 } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
 
 interface BubbleMapProps {
   isDemo?: boolean
@@ -55,14 +53,12 @@ const demoNodes: Node[] = [
 ]
 
 export default function BubbleMap({ isDemo = false, userData }: BubbleMapProps) {
-  const { user } = useAuth()
   const [nodes, setNodes] = useState<Node[]>(() => {
     if (isDemo) return demoNodes
     if (userData) return generateNodesFromUserData(userData)
     return demoNodes // Fallback, though empty state handles this
   })
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
-  const [simulationValue, setSimulationValue] = useState([100])
   const [scale, setScale] = useState(1)
   const [editMode, setEditMode] = useState(!isDemo) // Edit mode enabled by default for non-demo
   const [draggedNode, setDraggedNode] = useState<string | null>(null)
@@ -72,7 +68,6 @@ export default function BubbleMap({ isDemo = false, userData }: BubbleMapProps) 
   // Generate nodes from user data
   function generateNodesFromUserData(data: typeof userData): Node[] {
     const nodes: Node[] = []
-    let nodeIndex = 0
 
     // Add income as a single node
     if (data && data.income > 0) {
@@ -85,7 +80,6 @@ export default function BubbleMap({ isDemo = false, userData }: BubbleMapProps) 
         value: data.income,
         category: 'main'
       })
-      nodeIndex++
     }
 
     // Add expense nodes
@@ -144,7 +138,7 @@ export default function BubbleMap({ isDemo = false, userData }: BubbleMapProps) 
     setDraggedNode(nodeId)
   }
 
-  const handleDrag = (nodeId: string, event: any, info: any) => {
+  const handleDrag = (nodeId: string, _event: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number; y: number } }) => {
     if (!containerRef.current) return
     
     const containerRect = containerRef.current.getBoundingClientRect()
@@ -171,7 +165,7 @@ export default function BubbleMap({ isDemo = false, userData }: BubbleMapProps) 
     }))
   }
 
-  const handleDragEnd = useCallback((nodeId: string, event: any, info: any) => {
+  const handleDragEnd = useCallback((nodeId: string, _event: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number; y: number } }) => {
     if (!containerRef.current) return
     
     const containerRect = containerRef.current.getBoundingClientRect()
@@ -201,7 +195,8 @@ export default function BubbleMap({ isDemo = false, userData }: BubbleMapProps) 
     // Clean up drag state
     setDraggedNode(null)
     setDragPositions(prev => {
-      const { [nodeId]: removed, ...rest } = prev
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [nodeId]: _removed, ...rest } = prev
       return rest
     })
   }, [nodes])

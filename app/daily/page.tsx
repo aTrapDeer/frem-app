@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/contexts/auth-context"
-import { Plus, Minus, DollarSign, TrendingUp, Target, TrendingDown } from "lucide-react"
+import { Plus, Minus, DollarSign, TrendingUp, Target, TrendingDown, CheckCircle2, Clock, AlertTriangle } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 
 interface Transaction {
@@ -32,6 +32,29 @@ interface TargetData {
   dailySurplusDeficit: number
 }
 
+interface GoalProjection {
+  goalId: string
+  title: string
+  targetAmount: number
+  totalProjectedProgress: number
+  progressPercentage: number
+  monthlyAllocation: number
+  urgencyScore: number
+  projectedCompletionDate: string
+  daysUntilProjectedCompletion: number
+  isOnTrack: boolean
+  daysAheadOrBehind: number
+  status: 'on_track' | 'ahead' | 'behind' | 'at_risk' | 'completed'
+}
+
+interface ProjectionSummary {
+  goals: GoalProjection[]
+  totalMonthlyIncome: number
+  totalMonthlyExpenses: number
+  monthlySurplus: number
+  hasVariableIncome: boolean
+}
+
 export default function DailyInterface() {
   const { user, userSettings, isLoading } = useAuth()
   const router = useRouter()
@@ -44,6 +67,7 @@ export default function DailyInterface() {
   const [submitting, setSubmitting] = useState(false)
   const [targetData, setTargetData] = useState<TargetData | null>(null)
   const [targetLoading, setTargetLoading] = useState(true)
+  const [projections, setProjections] = useState<ProjectionSummary | null>(null)
 
   // Redirect unauthenticated users
   useEffect(() => {
@@ -77,17 +101,26 @@ export default function DailyInterface() {
     }
   }, [user])
 
-  // Fetch target calculation data
+  // Fetch target calculation data and projections
   useEffect(() => {
     async function fetchTargetData() {
       if (!user) return
       
       try {
         setTargetLoading(true)
-        const response = await fetch('/api/daily-target')
-        if (response.ok) {
-          const data = await response.json()
+        const [targetRes, projectionsRes] = await Promise.all([
+          fetch('/api/daily-target'),
+          fetch('/api/projections')
+        ])
+        
+        if (targetRes.ok) {
+          const data = await targetRes.json()
           setTargetData(data)
+        }
+        
+        if (projectionsRes.ok) {
+          const projectionsData = await projectionsRes.json()
+          setProjections(projectionsData)
         }
       } catch (error) {
         console.error('Error fetching target data:', error)
@@ -264,6 +297,59 @@ export default function DailyInterface() {
                 ></div>
               </div>
             </div>
+
+            {/* Goal Projections Mini Section */}
+            {projections && projections.goals.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  <Target className="h-4 w-4 text-blue-600" />
+                  Goal Progress
+                  {projections.hasVariableIncome && (
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                      Variable
+                    </span>
+                  )}
+                </h3>
+                <div className="space-y-2">
+                  {projections.goals.slice(0, 3).map((goal) => {
+                    const statusConfig = {
+                      completed: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2 },
+                      ahead: { bg: 'bg-blue-100', text: 'text-blue-700', icon: TrendingUp },
+                      on_track: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2 },
+                      behind: { bg: 'bg-amber-100', text: 'text-amber-700', icon: Clock },
+                      at_risk: { bg: 'bg-red-100', text: 'text-red-700', icon: AlertTriangle }
+                    }
+                    const config = statusConfig[goal.status]
+                    const StatusIcon = config.icon
+                    
+                    return (
+                      <div key={goal.goalId} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <StatusIcon className={`h-4 w-4 ${config.text}`} />
+                          <span className="text-sm font-medium text-slate-800 truncate max-w-[120px]">{goal.title}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-16 bg-slate-200 rounded-full h-1.5">
+                            <div 
+                              className="bg-blue-600 h-1.5 rounded-full"
+                              style={{ width: `${Math.min(goal.progressPercentage, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-slate-600 w-12 text-right">
+                            {Math.round(goal.progressPercentage)}%
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {projections.monthlySurplus > 0 && (
+                  <p className="text-xs text-slate-500 mt-2 text-center">
+                    ${projections.monthlySurplus.toLocaleString()}/mo allocated to goals
+                  </p>
+                )}
+              </div>
+            )}
           </Card>
 
           {/* Input Section */}

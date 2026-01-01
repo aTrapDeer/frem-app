@@ -3,7 +3,7 @@
  * Based on the Auth.js adapter pattern
  */
 
-import type { Adapter, AdapterUser, AdapterAccount, AdapterSession } from 'next-auth/adapters'
+import type { Adapter, AdapterAccount } from 'next-auth/adapters'
 import { db, generateUUID, getCurrentTimestamp } from './turso'
 
 export function TursoAdapter(): Adapter {

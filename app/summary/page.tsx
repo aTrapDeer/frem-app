@@ -6,10 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { useInView } from "framer-motion"
-import { Calendar, DollarSign, Target, MapPin, X, CreditCard, TrendingUp, TrendingDown } from "lucide-react"
+import { Calendar, DollarSign, Target, MapPin, X, CreditCard, TrendingUp, TrendingDown, CheckCircle2, Clock, AlertTriangle } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
+import { AIFinancialReport } from "@/components/ai-financial-report"
+import { FinancialAccounts } from "@/components/financial-accounts"
+import { OneTimeIncomeManager } from "@/components/one-time-income"
 
 const BubbleMap = React.lazy(() => import("@/components/bubble-map"))
 
@@ -31,14 +34,48 @@ interface UserFinancialData {
   sideProjects: Array<{ name: string; current_monthly_earnings: number }>
 }
 
+interface GoalProjection {
+  goalId: string
+  title: string
+  targetAmount: number
+  currentAmount: number
+  projectedAmount: number
+  totalProjectedProgress: number
+  progressPercentage: number
+  monthlyAllocation: number
+  urgencyScore: number
+  originalDeadline: string
+  projectedCompletionDate: string
+  daysUntilProjectedCompletion: number
+  isOnTrack: boolean
+  daysAheadOrBehind: number
+  status: 'on_track' | 'ahead' | 'behind' | 'at_risk' | 'completed'
+  category: string
+}
+
+interface ProjectionSummary {
+  goals: GoalProjection[]
+  totalMonthlyIncome: number
+  totalMonthlyExpenses: number
+  monthlySurplus: number
+  surplusAllocatedToGoals: number
+  hasVariableIncome: boolean
+  scenarios?: {
+    conservative: GoalProjection[]
+    expected: GoalProjection[]
+    optimistic: GoalProjection[]
+  }
+}
+
 export default function SummaryPage() {
   const { user, userSettings } = useAuth()
   const [showBubbleMap, setShowBubbleMap] = useState(false)
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [loading, setLoading] = useState(true)
   const [financialData, setFinancialData] = useState<UserFinancialData | null>(null)
-  const [targetData, setTargetData] = useState<any>(null)
-  const [incomeSummary, setIncomeSummary] = useState<any>(null)
+  const [targetData, setTargetData] = useState<{ dailyTarget: number; monthlyGoalObligations: number; monthlyRecurringTotal: number } | null>(null)
+  const [incomeSummary, setIncomeSummary] = useState<{ totalMonthlyMid: number; hasCommissionIncome: boolean } | null>(null)
+  const [projections, setProjections] = useState<ProjectionSummary | null>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
 
@@ -50,16 +87,25 @@ export default function SummaryPage() {
       try {
         setLoading(true)
         
-        // Fetch all user financial data from summary API
-        const response = await fetch('/api/summary')
-        if (!response.ok) throw new Error('Failed to fetch summary data')
+        // Fetch all user financial data from summary API and projections
+        const [summaryRes, projectionsRes] = await Promise.all([
+          fetch('/api/summary'),
+          fetch('/api/projections')
+        ])
         
-        const data = await response.json()
-        const { milestones: milestonesData, goals: goalsData, recurringExpenses: recurringExpensesData, sideProjects: sideProjectsData, transactions: recentTransactionsData, targetCalculation, financialData: apiFinancialData, incomeSummary: incomeSummaryData } = data
+        if (!summaryRes.ok) throw new Error('Failed to fetch summary data')
+        
+        const data = await summaryRes.json()
+        const { milestones: milestonesData, targetCalculation, incomeSummary: incomeSummaryData } = data
         
         setMilestones(milestonesData)
         setTargetData(targetCalculation)
         setIncomeSummary(incomeSummaryData)
+        
+        if (projectionsRes.ok) {
+          const projectionsData = await projectionsRes.json()
+          setProjections(projectionsData)
+        }
         
         // Calculate estimated monthly income from recent transactions
         const recentIncome = recentTransactionsData
@@ -397,6 +443,153 @@ export default function SummaryPage() {
                           ? `You have $${targetData.monthlySurplusDeficit.toLocaleString()}/month surplus. Consider increasing your goals or starting new investments.`
                           : `You need an additional $${Math.abs(targetData.monthlySurplusDeficit).toLocaleString()}/month income to comfortably meet your current financial obligations.`
                         }
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Bank Accounts & One-Time Income */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.82 }}
+            >
+              <FinancialAccounts />
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.84 }}
+            >
+              <OneTimeIncomeManager />
+            </motion.div>
+          </div>
+
+          {/* AI Financial Advisor Report */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.86 }}
+          >
+            <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <span className="text-2xl">🤖</span> AI Financial Advisor
+            </h2>
+            <AIFinancialReport />
+          </motion.div>
+
+          {/* Goal Projection Timeline */}
+          {projections && projections.goals.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.9 }}
+            >
+              <Card className="bg-white border border-slate-200 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-blue-600" />
+                      Goal Projection Timeline
+                    </div>
+                    {projections.hasVariableIncome && (
+                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
+                        Based on Safe Average Income
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {projections.goals.map((goal, index) => {
+                      const statusConfig = {
+                        completed: { bg: 'bg-green-500', border: 'border-green-200', icon: CheckCircle2, label: 'Completed!' },
+                        ahead: { bg: 'bg-blue-500', border: 'border-blue-200', icon: TrendingUp, label: `${goal.daysAheadOrBehind} days ahead` },
+                        on_track: { bg: 'bg-green-500', border: 'border-green-200', icon: CheckCircle2, label: 'On Track' },
+                        behind: { bg: 'bg-amber-500', border: 'border-amber-200', icon: Clock, label: `${Math.abs(goal.daysAheadOrBehind)} days behind` },
+                        at_risk: { bg: 'bg-red-500', border: 'border-red-200', icon: AlertTriangle, label: 'At Risk' }
+                      }
+                      const config = statusConfig[goal.status]
+                      const StatusIcon = config.icon
+                      
+                      return (
+                        <motion.div
+                          key={goal.goalId}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className={`p-4 rounded-xl border ${config.border} bg-gradient-to-r from-white to-slate-50`}
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <div className={`w-8 h-8 ${config.bg} rounded-lg flex items-center justify-center`}>
+                                  <StatusIcon className="h-4 w-4 text-white" />
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold text-slate-900">{goal.title}</h4>
+                                  <p className="text-xs text-slate-500 capitalize">{goal.category}</p>
+                                </div>
+                              </div>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              goal.status === 'completed' ? 'bg-green-100 text-green-700' :
+                              goal.status === 'ahead' ? 'bg-blue-100 text-blue-700' :
+                              goal.status === 'on_track' ? 'bg-green-100 text-green-700' :
+                              goal.status === 'behind' ? 'bg-amber-100 text-amber-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {config.label}
+                            </span>
+                          </div>
+                          
+                          {/* Progress bar */}
+                          <div className="mb-3">
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-slate-600">
+                                ${goal.totalProjectedProgress.toLocaleString()} of ${goal.targetAmount.toLocaleString()}
+                              </span>
+                              <span className="font-semibold text-slate-900">{Math.round(goal.progressPercentage)}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full transition-all duration-500 ${config.bg}`}
+                                style={{ width: `${Math.min(goal.progressPercentage, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Timeline info */}
+                          <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <p className="text-slate-500">Monthly Allocation</p>
+                              <p className="font-semibold text-green-600">+${goal.monthlyAllocation.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500">Original Deadline</p>
+                              <p className="font-medium text-slate-900">
+                                {new Date(goal.originalDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500">Projected Completion</p>
+                              <p className={`font-semibold ${goal.isOnTrack ? 'text-green-600' : 'text-amber-600'}`}>
+                                {new Date(goal.projectedCompletionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                  
+                  {projections.monthlySurplus > 0 && (
+                    <div className="mt-4 p-3 bg-blue-50 rounded-lg text-center">
+                      <p className="text-sm text-blue-700">
+                        <strong>${projections.monthlySurplus.toLocaleString()}/month</strong> is being automatically allocated to your goals
                       </p>
                     </div>
                   )}

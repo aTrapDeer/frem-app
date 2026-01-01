@@ -17,7 +17,8 @@ import {
   X,
   ChevronDown,
   ChevronUp,
-  Star
+  Star,
+  Info
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -65,6 +66,179 @@ const payFrequencies = [
   { value: 'monthly', label: 'Monthly', multiplier: 1 },
   { value: 'variable', label: 'Variable', multiplier: 1 }
 ]
+
+// Commission fields with info tooltip
+function CommissionFields({ 
+  formData, 
+  setFormData 
+}: { 
+  formData: {
+    commission_low: string
+    commission_high: string
+    commission_frequency_per_period: string
+    pay_frequency: string
+  }
+  setFormData: (data: Record<string, string | boolean>) => void 
+}) {
+  const [showInfo, setShowInfo] = useState(false)
+  
+  // Calculate preview values
+  const commissionLow = parseFloat(formData.commission_low) || 0
+  const commissionHigh = parseFloat(formData.commission_high) || 0
+  const frequency = parseFloat(formData.commission_frequency_per_period) || 0
+  
+  const payFreq = payFrequencies.find(f => f.value === formData.pay_frequency)
+  const multiplier = payFreq?.multiplier || 1
+  const frequencyLabel = formData.pay_frequency === 'biweekly' ? 'two weeks' : 
+                         formData.pay_frequency === 'semimonthly' ? 'pay period' :
+                         formData.pay_frequency
+  
+  // Calculate monthly estimates
+  const perPeriodLow = commissionLow * frequency
+  const perPeriodHigh = commissionHigh * frequency
+  const monthlyLow = Math.round(perPeriodLow * multiplier)
+  const monthlyHigh = Math.round(perPeriodHigh * multiplier)
+  const monthlyAvg = Math.round((monthlyLow + monthlyHigh) / 2)
+  
+  const hasValidInputs = commissionLow > 0 && commissionHigh > 0 && frequency > 0
+
+  return (
+    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-amber-800 flex items-center">
+          <TrendingUp className="h-4 w-4 mr-2" />
+          Commission Structure
+        </h3>
+        <button
+          type="button"
+          onClick={() => setShowInfo(!showInfo)}
+          className={`p-1.5 rounded-full transition-colors ${
+            showInfo ? 'bg-blue-100 text-blue-600' : 'hover:bg-amber-100 text-amber-600'
+          }`}
+          title="How is this calculated?"
+        >
+          <Info className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Info Panel */}
+      <AnimatePresence>
+        {showInfo && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm space-y-2">
+              <div className="font-medium text-blue-800 flex items-center gap-1.5">
+                <Info className="h-4 w-4" />
+                How We Calculate Your Monthly Commission
+              </div>
+              <div className="text-blue-700 space-y-1.5">
+                <p>
+                  <span className="font-medium">Step 1:</span> Multiply commission per sale by sales per period
+                </p>
+                <p className="pl-4 text-xs bg-blue-100 rounded px-2 py-1 font-mono">
+                  ${commissionLow || '?'} × {frequency || '?'} = ${perPeriodLow || '?'} (low)
+                  <br />
+                  ${commissionHigh || '?'} × {frequency || '?'} = ${perPeriodHigh || '?'} (high)
+                </p>
+                <p>
+                  <span className="font-medium">Step 2:</span> Convert to monthly ({multiplier}× for {formData.pay_frequency})
+                </p>
+                <p className="pl-4 text-xs bg-blue-100 rounded px-2 py-1 font-mono">
+                  ${perPeriodLow || '?'} × {multiplier} = ${monthlyLow || '?'}/mo (low)
+                  <br />
+                  ${perPeriodHigh || '?'} × {multiplier} = ${monthlyHigh || '?'}/mo (high)
+                </p>
+                <p>
+                  <span className="font-medium">Step 3:</span> Average for safe estimate
+                </p>
+                <p className="pl-4 text-xs bg-blue-100 rounded px-2 py-1 font-mono">
+                  (${monthlyLow || '?'} + ${monthlyHigh || '?'}) ÷ 2 = ${monthlyAvg || '?'}/mo
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="commission_low">Low Commission</Label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+            <Input
+              id="commission_low"
+              type="number"
+              step="0.01"
+              placeholder="45"
+              value={formData.commission_low}
+              onChange={(e) => setFormData({ ...formData, commission_low: e.target.value })}
+              className="pl-8 bg-white"
+            />
+          </div>
+          <p className="text-xs text-slate-500 mt-1">Per sale (worst case)</p>
+        </div>
+        
+        <div>
+          <Label htmlFor="commission_high">High Commission</Label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+            <Input
+              id="commission_high"
+              type="number"
+              step="0.01"
+              placeholder="75"
+              value={formData.commission_high}
+              onChange={(e) => setFormData({ ...formData, commission_high: e.target.value })}
+              className="pl-8 bg-white"
+            />
+          </div>
+          <p className="text-xs text-slate-500 mt-1">Per sale (best case)</p>
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="commission_frequency">Sales Per Pay Period</Label>
+        <Input
+          id="commission_frequency"
+          type="number"
+          step="0.5"
+          placeholder="5"
+          value={formData.commission_frequency_per_period}
+          onChange={(e) => setFormData({ ...formData, commission_frequency_per_period: e.target.value })}
+          className="bg-white"
+        />
+        <p className="text-xs text-slate-500 mt-1">
+          Average sales you make each {frequencyLabel}
+        </p>
+      </div>
+
+      {/* Live Estimate Preview */}
+      {hasValidInputs && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 bg-white border border-amber-300 rounded-lg"
+        >
+          <div className="text-xs text-slate-500 mb-1">Estimated Monthly Commission</div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm">
+              <span className="text-red-600 font-medium">${monthlyLow.toLocaleString()}</span>
+              <span className="text-slate-400 mx-2">→</span>
+              <span className="text-green-600 font-medium">${monthlyHigh.toLocaleString()}</span>
+            </div>
+            <div className="text-blue-600 font-bold">
+              ~${monthlyAvg.toLocaleString()}/mo
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  )
+}
 
 export function IncomeSources() {
   const { user } = useAuth()
@@ -367,7 +541,7 @@ export function IncomeSources() {
                 setShowAddForm(true)
               }}
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <Plus className="h-4 w-4 mr-1" />
               Add Income
@@ -606,24 +780,31 @@ export function IncomeSources() {
                     </select>
                   </div>
 
-                  {/* Base Amount */}
-                  <div>
-                    <Label htmlFor="base_amount">
-                      {formData.income_type === 'hourly' ? 'Hourly Rate' : 'Amount Per Pay Period'}
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                      <Input
-                        id="base_amount"
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.base_amount}
-                        onChange={(e) => setFormData({ ...formData, base_amount: e.target.value })}
-                        className="pl-8 bg-white"
-                      />
+                  {/* Base Amount - Hide for pure commission type */}
+                  {formData.income_type !== 'commission' && (
+                    <div>
+                      <Label htmlFor="base_amount">
+                        {formData.income_type === 'hourly' ? 'Hourly Rate' : 'Base Amount Per Pay Period'}
+                      </Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                        <Input
+                          id="base_amount"
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={formData.base_amount}
+                          onChange={(e) => setFormData({ ...formData, base_amount: e.target.value })}
+                          className="pl-8 bg-white"
+                        />
+                      </div>
+                      {formData.is_commission_based && (
+                        <p className="text-xs text-slate-500 mt-1">
+                          Fixed pay before commission (e.g., base salary)
+                        </p>
+                      )}
                     </div>
-                  </div>
+                  )}
 
                   {/* Hours per week (for hourly) */}
                   {formData.income_type === 'hourly' && (
@@ -658,64 +839,10 @@ export function IncomeSources() {
 
                   {/* Commission Fields */}
                   {(formData.is_commission_based || formData.income_type === 'commission') && (
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-4">
-                      <h3 className="font-semibold text-amber-800 flex items-center">
-                        <TrendingUp className="h-4 w-4 mr-2" />
-                        Commission Structure
-                      </h3>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="commission_low">Low Sale Amount</Label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                            <Input
-                              id="commission_low"
-                              type="number"
-                              step="0.01"
-                              placeholder="100"
-                              value={formData.commission_low}
-                              onChange={(e) => setFormData({ ...formData, commission_low: e.target.value })}
-                              className="pl-8 bg-white"
-                            />
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1">Minimum commission per sale</p>
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="commission_high">High Sale Amount</Label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                            <Input
-                              id="commission_high"
-                              type="number"
-                              step="0.01"
-                              placeholder="500"
-                              value={formData.commission_high}
-                              onChange={(e) => setFormData({ ...formData, commission_high: e.target.value })}
-                              className="pl-8 bg-white"
-                            />
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1">Maximum commission per sale</p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <Label htmlFor="commission_frequency">Average Sales Per Pay Period</Label>
-                        <Input
-                          id="commission_frequency"
-                          type="number"
-                          step="0.5"
-                          placeholder="4"
-                          value={formData.commission_frequency_per_period}
-                          onChange={(e) => setFormData({ ...formData, commission_frequency_per_period: e.target.value })}
-                          className="bg-white"
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                          How many sales you typically make each {formData.pay_frequency === 'biweekly' ? 'two weeks' : formData.pay_frequency}
-                        </p>
-                      </div>
-                    </div>
+                    <CommissionFields 
+                      formData={formData} 
+                      setFormData={setFormData}
+                    />
                   )}
 
                   {/* Primary Source Toggle */}
@@ -750,7 +877,7 @@ export function IncomeSources() {
                   <Button
                     onClick={editingSource ? handleUpdateSource : handleAddSource}
                     disabled={!formData.name || submitting}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     {submitting ? 'Saving...' : (editingSource ? 'Save Changes' : 'Add Income Source')}
                   </Button>

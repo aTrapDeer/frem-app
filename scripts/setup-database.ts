@@ -166,6 +166,8 @@ const createTableStatements = [
       amount REAL NOT NULL CHECK (amount > 0),
       contribution_date TEXT NOT NULL DEFAULT (date('now')),
       description TEXT,
+      source TEXT DEFAULT 'manual' CHECK (source IN ('manual', 'one_time_income', 'auto_allocation')),
+      source_id TEXT,
       transaction_id TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (goal_id) REFERENCES financial_goals(id) ON DELETE CASCADE,
@@ -364,6 +366,59 @@ const createTableStatements = [
       FOREIGN KEY (transaction_id) REFERENCES daily_transactions(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`
+  },
+  {
+    name: 'ai_financial_reports',
+    sql: `CREATE TABLE IF NOT EXISTS ai_financial_reports (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT UNIQUE NOT NULL,
+      report_content TEXT NOT NULL,
+      financial_health_score INTEGER CHECK (financial_health_score >= 0 AND financial_health_score <= 100),
+      context_hash TEXT NOT NULL,
+      model_used TEXT NOT NULL,
+      total_monthly_income REAL DEFAULT 0,
+      total_monthly_expenses REAL DEFAULT 0,
+      total_goals_amount REAL DEFAULT 0,
+      active_goals_count INTEGER DEFAULT 0,
+      generated_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  },
+  {
+    name: 'financial_accounts',
+    sql: `CREATE TABLE IF NOT EXISTS financial_accounts (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      account_type TEXT NOT NULL CHECK (account_type IN ('checking', 'savings')),
+      name TEXT NOT NULL,
+      balance REAL DEFAULT 0 CHECK (balance >= 0),
+      institution TEXT,
+      notes TEXT,
+      is_primary INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  },
+  {
+    name: 'one_time_income',
+    sql: `CREATE TABLE IF NOT EXISTS one_time_income (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      amount REAL NOT NULL CHECK (amount > 0),
+      description TEXT NOT NULL,
+      source TEXT NOT NULL CHECK (source IN ('sale', 'gift', 'bonus', 'refund', 'cashback', 'settlement', 'inheritance', 'other')),
+      income_date TEXT NOT NULL DEFAULT (date('now')),
+      applied_to_goals INTEGER DEFAULT 0,
+      goal_id TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (goal_id) REFERENCES financial_goals(id) ON DELETE SET NULL
+    )`
   }
 ]
 
@@ -387,6 +442,11 @@ const createIndexStatements = [
   'CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read)',
   'CREATE INDEX IF NOT EXISTS idx_transaction_allocations_transaction ON transaction_allocations(transaction_id)',
   'CREATE INDEX IF NOT EXISTS idx_transaction_allocations_user ON transaction_allocations(user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_ai_financial_reports_user ON ai_financial_reports(user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_financial_accounts_user ON financial_accounts(user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_financial_accounts_type ON financial_accounts(account_type)',
+  'CREATE INDEX IF NOT EXISTS idx_one_time_income_user ON one_time_income(user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_one_time_income_date ON one_time_income(income_date)',
 ]
 
 // Default categories to seed

@@ -139,7 +139,7 @@ export default function Roadmap() {
                       </Link>
                     </div>
                   ) : (
-                    milestones.map((milestone, index) => {
+                    milestones.map((milestone) => {
                       const progress = milestone.target_amount && milestone.target_amount > 0 
                         ? (milestone.current_amount / milestone.target_amount) * 100 
                         : 0

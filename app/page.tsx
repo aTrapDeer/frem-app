@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { motion, useInView } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Navbar } from "@/components/navbar"
@@ -16,31 +15,6 @@ import dynamic from "next/dynamic"
 // Dynamically import motion components to prevent SSR issues
 const DynamicMotionDiv = dynamic(
   () => import("framer-motion").then((mod) => ({ default: mod.motion.div })),
-  { ssr: false }
-)
-
-const DynamicMotionH1 = dynamic(
-  () => import("framer-motion").then((mod) => ({ default: mod.motion.h1 })),
-  { ssr: false }
-)
-
-const DynamicMotionP = dynamic(
-  () => import("framer-motion").then((mod) => ({ default: mod.motion.p })),
-  { ssr: false }
-)
-
-const DynamicMotionSpan = dynamic(
-  () => import("framer-motion").then((mod) => ({ default: mod.motion.span })),
-  { ssr: false }
-)
-
-const DynamicMotionSvg = dynamic(
-  () => import("framer-motion").then((mod) => ({ default: mod.motion.svg })),
-  { ssr: false }
-)
-
-const DynamicMotionLine = dynamic(
-  () => import("framer-motion").then((mod) => ({ default: mod.motion.line })),
   { ssr: false }
 )
 
@@ -258,7 +232,7 @@ function DashboardCard() {
         {/* Daily Target */}
         <div className="bg-blue-50 rounded-xl p-4 mb-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-slate-600">Today's Progress</span>
+            <span className="text-sm font-medium text-slate-600">Today&apos;s Progress</span>
             <span className="text-xs text-blue-600 font-medium">On Track</span>
           </div>
           <div className="flex items-end gap-2 mb-2">
