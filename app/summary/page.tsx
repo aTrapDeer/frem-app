@@ -75,6 +75,29 @@ interface Transaction {
   date?: string
 }
 
+interface RecurringExpense {
+  id: string
+  name: string
+  amount: number
+  category?: string
+}
+
+interface Goal {
+  id: string
+  title: string
+  current_amount: number
+  target_amount: number
+  deadline?: string
+  category?: string
+}
+
+interface SideProject {
+  id: string
+  name: string
+  current_monthly_earnings: number
+  description?: string
+}
+
 export default function SummaryPage() {
   const { user, userSettings } = useAuth()
   const [showBubbleMap, setShowBubbleMap] = useState(false)
@@ -134,16 +157,16 @@ export default function SummaryPage() {
         // Prepare financial data for journey map
         const userData: UserFinancialData = {
           income: estimatedMonthlyIncome,
-          expenses: recurringExpensesData.map(expense => ({
+          expenses: (recurringExpensesData as RecurringExpense[]).map((expense: RecurringExpense) => ({
             name: expense.name,
             amount: expense.amount
           })),
-          goals: goalsData.map(goal => ({
+          goals: (goalsData as Goal[]).map((goal: Goal) => ({
             title: goal.title,
             current_amount: goal.current_amount,
             target_amount: goal.target_amount
           })),
-          sideProjects: sideProjectsData.map(project => ({
+          sideProjects: (sideProjectsData as SideProject[]).map((project: SideProject) => ({
             name: project.name,
             current_monthly_earnings: project.current_monthly_earnings
           }))
