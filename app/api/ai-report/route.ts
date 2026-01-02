@@ -229,18 +229,45 @@ export async function POST() {
     // Call OpenAI API
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     
-    const completion = await openai.chat.completions.create({
-      model: MODEL_NAME,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.7,
-      max_completion_tokens: 2000,
-      response_format: { type: 'json_object' }
-    })
+    console.log('Calling OpenAI with model:', MODEL_NAME)
     
-    const responseContent = completion.choices[0].message.content || '{}'
+    let completion
+    try {
+      completion = await openai.chat.completions.create({
+        model: MODEL_NAME,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_completion_tokens: 16000, // Reasoning models need more tokens for thinking + output
+        response_format: { type: 'json_object' }
+      })
+    } catch (apiError) {
+      console.error('OpenAI API error:', apiError)
+      return Response.json({ 
+        error: 'OpenAI API call failed',
+        details: apiError instanceof Error ? apiError.message : 'Unknown API error'
+      }, { status: 500 })
+    }
+    
+    // Log the full completion object for debugging
+    console.log('OpenAI completion:', JSON.stringify(completion, null, 2))
+    
+    const choice = completion.choices[0]
+    const responseContent = choice?.message?.content
+    
+    if (!responseContent) {
+      console.error('OpenAI returned empty response')
+      console.error('Finish reason:', choice?.finish_reason)
+      console.error('Message:', JSON.stringify(choice?.message))
+      return Response.json({ 
+        error: 'OpenAI returned empty response',
+        details: `Finish reason: ${choice?.finish_reason || 'unknown'}, Message: ${JSON.stringify(choice?.message)}`
+      }, { status: 500 })
+    }
+    
+    console.log('OpenAI response received, length:', responseContent.length)
     
     // Parse to extract health score
     let parsedResponse
