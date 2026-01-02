@@ -67,6 +67,14 @@ interface ProjectionSummary {
   }
 }
 
+interface Transaction {
+  id: string
+  type: string
+  amount: number
+  description?: string
+  date?: string
+}
+
 export default function SummaryPage() {
   const { user, userSettings } = useAuth()
   const [showBubbleMap, setShowBubbleMap] = useState(false)
@@ -116,9 +124,9 @@ export default function SummaryPage() {
         }
         
         // Calculate estimated monthly income from recent transactions
-        const recentIncome = recentTransactionsData
-          .filter(t => t.type === 'income')
-          .reduce((sum, t) => sum + t.amount, 0)
+        const recentIncome = (recentTransactionsData as Transaction[])
+          .filter((t: Transaction) => t.type === 'income')
+          .reduce((sum: number, t: Transaction) => sum + t.amount, 0)
         
         // Estimate monthly income (rough calculation)
         const estimatedMonthlyIncome = recentIncome * 30 / Math.max(7, recentTransactionsData.length) || (userSettings?.daily_budget_target ? userSettings.daily_budget_target * 30 : 0)
