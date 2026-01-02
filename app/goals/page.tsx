@@ -21,7 +21,7 @@ const goalSchema = z.object({
   amount: z.number().min(1, "Amount must be greater than 0"),
   deadline: z.string().min(1, "Deadline is required"),
   category: z.enum(["emergency", "vacation", "car", "house", "debt", "investment", "other"]),
-  urgency_score: z.number().min(1).max(5).default(3),
+  urgency_score: z.number().min(1).max(5),
 })
 
 type GoalFormData = z.infer<typeof goalSchema>
