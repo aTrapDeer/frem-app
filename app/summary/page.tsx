@@ -104,8 +104,23 @@ export default function SummaryPage() {
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [loading, setLoading] = useState(true)
   const [financialData, setFinancialData] = useState<UserFinancialData | null>(null)
-  const [targetData, setTargetData] = useState<{ dailyTarget: number; monthlyGoalObligations: number; monthlyRecurringTotal: number } | null>(null)
-  const [incomeSummary, setIncomeSummary] = useState<{ totalMonthlyMid: number; hasCommissionIncome: boolean } | null>(null)
+  const [targetData, setTargetData] = useState<{ 
+    dailyTarget: number
+    monthlyGoalObligations: number
+    monthlyRecurringTotal: number
+    totalMonthlyObligations: number
+    estimatedMonthlyIncome: number
+    monthlySurplusDeficit: number
+    activeGoalsCount: number
+    recurringExpensesCount: number
+    monthlyProjectIncome: number
+  } | null>(null)
+  const [incomeSummary, setIncomeSummary] = useState<{ 
+    totalMonthlyMid: number
+    totalMonthlyLow: number
+    totalMonthlyHigh: number
+    hasCommissionIncome: boolean 
+  } | null>(null)
   const [projections, setProjections] = useState<ProjectionSummary | null>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })

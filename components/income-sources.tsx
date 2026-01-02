@@ -67,6 +67,21 @@ const payFrequencies = [
   { value: 'variable', label: 'Variable', multiplier: 1 }
 ]
 
+// Form data type for commission fields
+type CommissionFormData = {
+  name: string
+  description: string
+  income_type: IncomeSource['income_type']
+  pay_frequency: IncomeSource['pay_frequency']
+  base_amount: string
+  hours_per_week: string
+  is_commission_based: boolean
+  commission_high: string
+  commission_low: string
+  commission_frequency_per_period: string
+  is_primary: boolean
+}
+
 // Commission fields with info tooltip
 function CommissionFields({ 
   formData, 
@@ -78,7 +93,7 @@ function CommissionFields({
     commission_frequency_per_period: string
     pay_frequency: string
   }
-  setFormData: (data: Record<string, string | boolean>) => void 
+  setFormData: React.Dispatch<React.SetStateAction<CommissionFormData>>
 }) {
   const [showInfo, setShowInfo] = useState(false)
   
@@ -175,7 +190,7 @@ function CommissionFields({
               step="0.01"
               placeholder="45"
               value={formData.commission_low}
-              onChange={(e) => setFormData({ ...formData, commission_low: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, commission_low: e.target.value }))}
               className="pl-8 bg-white"
             />
           </div>
@@ -192,7 +207,7 @@ function CommissionFields({
               step="0.01"
               placeholder="75"
               value={formData.commission_high}
-              onChange={(e) => setFormData({ ...formData, commission_high: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, commission_high: e.target.value }))}
               className="pl-8 bg-white"
             />
           </div>
@@ -208,7 +223,7 @@ function CommissionFields({
           step="0.5"
           placeholder="5"
           value={formData.commission_frequency_per_period}
-          onChange={(e) => setFormData({ ...formData, commission_frequency_per_period: e.target.value })}
+          onChange={(e) => setFormData(prev => ({ ...prev, commission_frequency_per_period: e.target.value }))}
           className="bg-white"
         />
         <p className="text-xs text-slate-500 mt-1">
