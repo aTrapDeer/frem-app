@@ -131,6 +131,13 @@ export function TursoAdapter(): Adapter {
     async linkAccount(account) {
       const id = generateUUID()
       
+      // Convert session_state to string if it's an object
+      const sessionState = account.session_state 
+        ? (typeof account.session_state === 'object' 
+            ? JSON.stringify(account.session_state) 
+            : String(account.session_state))
+        : null
+      
       await db.execute({
         sql: `INSERT INTO accounts (id, user_id, type, provider, provider_account_id, refresh_token, access_token, expires_at, token_type, scope, id_token, session_state)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -146,7 +153,7 @@ export function TursoAdapter(): Adapter {
           account.token_type ?? null,
           account.scope ?? null,
           account.id_token ?? null,
-          account.session_state ?? null,
+          sessionState,
         ]
       })
       

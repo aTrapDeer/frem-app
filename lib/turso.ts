@@ -1,4 +1,4 @@
-import { createClient, Client } from '@libsql/client'
+import { createClient, Client, InStatement, ResultSet, InArgs } from '@libsql/client'
 
 // Only create the client on the server side
 let turso: Client | null = null
@@ -29,8 +29,8 @@ function getTursoClient(): Client {
 
 // Export a proxy that lazily initializes the client
 export const db = {
-  execute: (...args: Parameters<Client['execute']>) => getTursoClient().execute(...args),
-  batch: (...args: Parameters<Client['batch']>) => getTursoClient().batch(...args),
+  execute: (stmt: InStatement): Promise<ResultSet> => getTursoClient().execute(stmt),
+  batch: (stmts: InStatement[], mode?: "write" | "read" | "deferred"): Promise<ResultSet[]> => getTursoClient().batch(stmts, mode),
 }
 
 // For backward compatibility, also export as turso

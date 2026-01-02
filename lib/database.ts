@@ -1474,7 +1474,7 @@ export const updateIncomeSource = async (id: string, updates: Partial<IncomeSour
   const estimates = calculateMonthlyEstimates(merged)
   
   const fields: string[] = []
-  const values: unknown[] = []
+  const values: (string | number | boolean | null)[] = []
   
   // Build dynamic update query
   const allowedFields = [
