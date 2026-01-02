@@ -940,9 +940,9 @@ function GoalCard({ goal, projection, index, onEdit, onDelete, onUrgencyChange }
 
 interface GoalWizardStepProps {
   step: number
-  register: ReturnType<typeof import('react-hook-form').useForm>['register']
-  errors: Record<string, { message?: string }>
-  watchedValues: Record<string, string | number | undefined>
+  register: ReturnType<typeof useForm<GoalFormData>>['register']
+  errors: Partial<Record<keyof GoalFormData, { message?: string }>>
+  watchedValues: Partial<GoalFormData>
   onNext: () => void
   onPrev: () => void
   isValid: boolean
