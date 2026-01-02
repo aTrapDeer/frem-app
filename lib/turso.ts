@@ -1,4 +1,4 @@
-import { createClient, Client, InStatement, ResultSet, InArgs } from '@libsql/client'
+import { createClient, Client, InStatement, ResultSet } from '@libsql/client'
 
 // Only create the client on the server side
 let turso: Client | null = null
