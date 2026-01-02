@@ -99,6 +99,9 @@ export default function GoalsPage() {
   } = useForm<GoalFormData>({
     resolver: zodResolver(goalSchema),
     mode: "onChange",
+    defaultValues: {
+      urgency_score: 3,
+    },
   })
 
   // Watch form values for step navigation
