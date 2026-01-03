@@ -240,7 +240,7 @@ export async function POST() {
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.7,
-        max_completion_tokens: 16000, // Reasoning models need more tokens for thinking + output
+        max_completion_tokens: 20000, // Reasoning models need more tokens for thinking + output (increased 25%)
         response_format: { type: 'json_object' }
       })
     } catch (apiError) {

@@ -86,6 +86,12 @@ export function Navbar() {
                 >
                   Recurring
                 </Link>
+                <Link
+                  href="/chat"
+                  className="text-sm text-indigo-600 hover:text-indigo-700 focus-ring rounded transition-colors font-medium"
+                >
+                  💬 Chat
+                </Link>
               </>
             )}
 
@@ -213,6 +219,13 @@ export function Navbar() {
                     onClick={() => setIsOpen(false)}
                   >
                     Recurring
+                  </Link>
+                  <Link
+                    href="/chat"
+                    className="block text-indigo-600 hover:text-indigo-700 focus-ring rounded transition-colors font-medium"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    💬 AI Chat
                   </Link>
                   <div className="pt-3 border-t border-slate-200 space-y-2">
                     {user && (

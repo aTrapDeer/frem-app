@@ -200,24 +200,38 @@ export default function SummaryPage() {
     }
   }, [user, userSettings])
 
-  // Calculate KPIs from actual user data
+  // Calculate dynamic KPIs from actual user data
+  const monthlyIncome = targetData?.estimatedMonthlyIncome || incomeSummary?.totalMonthlyMid || 0
+  const monthlyExpenses = targetData?.monthlyRecurringTotal || 0
+  const monthlySurplus = targetData?.monthlySurplusDeficit || (monthlyIncome - monthlyExpenses)
+  
+  // Calculate savings rate (percentage of income saved/available after expenses)
+  const savingsRate = monthlyIncome > 0 ? Math.round((monthlySurplus / monthlyIncome) * 100) : 0
+  
+  // Calculate average goal progress from projections or goals data
+  const goalProgress = projections?.goals && projections.goals.length > 0
+    ? Math.round(projections.goals.reduce((sum, g) => sum + g.progressPercentage, 0) / projections.goals.length)
+    : financialData?.goals && financialData.goals.length > 0
+      ? Math.round(financialData.goals.reduce((sum, g) => sum + (g.current_amount / g.target_amount * 100), 0) / financialData.goals.length)
+      : 0
+  
+  // Calculate months until goals complete (average)
+  const avgMonthsToGoals = projections?.goals && projections.goals.length > 0
+    ? Math.round(projections.goals.reduce((sum, g) => sum + (g.daysUntilProjectedCompletion / 30), 0) / projections.goals.length)
+    : 0
+
   const kpis = {
-    totalMilestones: milestones.length,
-    percentComplete: milestones.length > 0 
-      ? milestones.filter(m => m.status === 'completed').length / milestones.length * 100 
-      : 0,
-    avgProgress: milestones.length > 0 
-      ? milestones.reduce((sum, milestone) => {
-          if (!milestone.target_amount) return sum
-          return sum + (milestone.current_amount / milestone.target_amount * 100)
-        }, 0) / milestones.length 
-      : 0,
+    // Dynamic metrics based on income, expenses, goals
+    savingsRate,
+    goalProgress,
+    monthlySurplus,
+    avgMonthsToGoals,
     // Financial health metrics from target calculation
     monthlyObligations: targetData?.totalMonthlyObligations || 0,
-    monthlyIncome: targetData?.estimatedMonthlyIncome || 0,
+    monthlyIncome,
     dailyTarget: targetData?.dailyTarget || 0,
     financialHealth: targetData ? (targetData.monthlySurplusDeficit >= 0 ? 'positive' : 'negative') : 'unknown',
-    surplus: targetData?.monthlySurplusDeficit || 0,
+    surplus: monthlySurplus,
     activeGoals: targetData?.activeGoalsCount || 0,
     recurringExpenses: targetData?.recurringExpensesCount || 0,
   }
@@ -268,7 +282,7 @@ export default function SummaryPage() {
             <p className="text-slate-600">Your complete financial journey at a glance</p>
           </motion.div>
 
-          {/* KPI Strip */}
+          {/* KPI Strip - Dynamic metrics based on income, expenses, goals */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -277,13 +291,15 @@ export default function SummaryPage() {
             >
               <Card className="glass-card card-lift">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-600">Total Milestones</CardTitle>
-                  <Target className="h-4 w-4 text-slate-600" />
+                  <CardTitle className="text-sm font-medium text-slate-600">Savings Rate</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-slate-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold font-numbers text-slate-900">{kpis.totalMilestones}</div>
+                  <div className={`text-2xl font-bold font-numbers ${kpis.savingsRate >= 20 ? 'text-green-600' : kpis.savingsRate >= 10 ? 'text-amber-600' : kpis.savingsRate >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                    {kpis.savingsRate}%
+                  </div>
                   <p className="text-xs text-slate-600 flex items-center mt-1">
-                    {milestones.filter(m => m.status === 'completed').length} completed
+                    {kpis.savingsRate >= 20 ? '🎉 Great!' : kpis.savingsRate >= 10 ? '👍 Good' : kpis.savingsRate >= 0 ? '⚠️ Low' : '🚨 Deficit'} of income saved
                   </p>
                 </CardContent>
               </Card>
@@ -296,14 +312,17 @@ export default function SummaryPage() {
             >
               <Card className="glass-card card-lift">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-600">Average Progress</CardTitle>
-                  <Calendar className="h-4 w-4 text-slate-600" />
+                  <CardTitle className="text-sm font-medium text-slate-600">Goal Progress</CardTitle>
+                  <Target className="h-4 w-4 text-slate-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold font-numbers text-slate-900">{Math.round(kpis.avgProgress)}%</div>
+                  <div className="text-2xl font-bold font-numbers text-slate-900">{kpis.goalProgress}%</div>
                   <div className="mt-2">
-                    <Progress value={kpis.avgProgress} className="h-2" />
+                    <Progress value={kpis.goalProgress} className="h-2" />
                   </div>
+                  <p className="text-xs text-slate-600 mt-1">
+                    avg across {kpis.activeGoals || projections?.goals?.length || 0} goals
+                  </p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -315,13 +334,15 @@ export default function SummaryPage() {
             >
               <Card className="glass-card card-lift">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-600">Completion Rate</CardTitle>
-                  <DollarSign className="h-4 w-4 text-slate-600" />
+                  <CardTitle className="text-sm font-medium text-slate-600">Monthly Surplus</CardTitle>
+                  <DollarSign className={`h-4 w-4 ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`} />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold font-numbers text-slate-900">{Math.round(kpis.percentComplete)}%</div>
+                  <div className={`text-2xl font-bold font-numbers ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {kpis.monthlySurplus >= 0 ? '+' : ''}${Math.abs(kpis.monthlySurplus).toLocaleString()}
+                  </div>
                   <p className="text-xs text-slate-600 mt-1">
-                    of your milestones achieved
+                    {kpis.avgMonthsToGoals > 0 ? `~${kpis.avgMonthsToGoals} mo to goals` : 'after expenses'}
                   </p>
                 </CardContent>
               </Card>

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 :root {
   --background: 255 255 255;
@@ -267,4 +268,100 @@ select:-webkit-autofill:focus {
   background-image: 
     radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
     radial-gradient(at 0% 100%, rgba(14, 165, 233, 0.06) 0px, transparent 50%);
+}
+
+/* Markdown styles for chat */
+.prose-chat {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.prose-chat p {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-chat p:first-child {
+  margin-top: 0;
+}
+
+.prose-chat p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-chat ul,
+.prose-chat ol {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.prose-chat li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.prose-chat strong {
+  font-weight: 600;
+}
+
+.prose-chat code {
+  background-color: rgb(241 245 249);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+.prose-chat pre {
+  background-color: rgb(241 245 249);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-chat pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.prose-chat h1,
+.prose-chat h2,
+.prose-chat h3,
+.prose-chat h4 {
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-chat h1:first-child,
+.prose-chat h2:first-child,
+.prose-chat h3:first-child,
+.prose-chat h4:first-child {
+  margin-top: 0;
+}
+
+.prose-chat blockquote {
+  border-left: 3px solid rgb(99 102 241);
+  padding-left: 0.75rem;
+  margin-left: 0;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: rgb(71 85 105);
+}
+
+/* User message markdown (light text on dark background) */
+.prose-chat-user code {
+  background-color: rgb(99 102 241 / 0.3);
+  color: white;
+}
+
+.prose-chat-user pre {
+  background-color: rgb(99 102 241 / 0.3);
+}
+
+.prose-chat-user blockquote {
+  border-left-color: rgb(199 210 254);
+  color: rgb(224 231 255);
 }
