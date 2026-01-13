@@ -18,7 +18,9 @@ import {
   ChevronDown,
   ChevronUp,
   Star,
-  Info
+  Info,
+  Calendar,
+  Clock
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -39,6 +41,12 @@ interface IncomeSource {
   estimated_monthly_high: number
   status: string
   is_primary: boolean
+  // Contract/schedule fields
+  start_date: string | null
+  end_date: string | null
+  initial_payment: number
+  final_payment: number
+  final_payment_date: string | null
 }
 
 interface IncomeSummary {
@@ -80,6 +88,13 @@ type CommissionFormData = {
   commission_low: string
   commission_frequency_per_period: string
   is_primary: boolean
+  // Contract/schedule fields
+  has_schedule: boolean
+  start_date: string
+  end_date: string
+  initial_payment: string
+  final_payment: string
+  final_payment_date: string
 }
 
 // Commission fields with info tooltip
@@ -255,6 +270,181 @@ function CommissionFields({
   )
 }
 
+// Contract Schedule Fields Component
+function ContractScheduleFields({ 
+  formData, 
+  setFormData 
+}: { 
+  formData: CommissionFormData
+  setFormData: React.Dispatch<React.SetStateAction<CommissionFormData>>
+}) {
+  // Calculate contract duration and total value preview
+  const startDate = formData.start_date ? new Date(formData.start_date) : null
+  const endDate = formData.end_date ? new Date(formData.end_date) : null
+  
+  let contractMonths = 0
+  if (startDate && endDate) {
+    const diffTime = endDate.getTime() - startDate.getTime()
+    const diffDays = diffTime / (1000 * 60 * 60 * 24)
+    contractMonths = Math.max(1, Math.round(diffDays / 30.44))
+  }
+  
+  const initialPayment = parseFloat(formData.initial_payment) || 0
+  const finalPayment = parseFloat(formData.final_payment) || 0
+  const baseAmount = parseFloat(formData.base_amount) || 0
+  
+  // Calculate total contract value
+  const recurringTotal = baseAmount * contractMonths
+  const totalContractValue = recurringTotal + initialPayment + finalPayment
+
+  return (
+    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-blue-800 flex items-center">
+          <Calendar className="h-4 w-4 mr-2" />
+          Contract Schedule
+        </h3>
+      </div>
+      
+      <p className="text-xs text-blue-700">
+        Define when this income starts and ends, plus any one-time payments.
+      </p>
+
+      {/* Date Range */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="start_date">Start Date</Label>
+          <Input
+            id="start_date"
+            type="date"
+            value={formData.start_date}
+            onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
+            className="bg-white"
+          />
+        </div>
+        
+        <div>
+          <Label htmlFor="end_date">End Date</Label>
+          <Input
+            id="end_date"
+            type="date"
+            value={formData.end_date}
+            onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
+            className="bg-white"
+          />
+        </div>
+      </div>
+
+      {/* Duration Preview */}
+      {contractMonths > 0 && (
+        <div className="text-sm text-blue-700 bg-blue-100 rounded px-3 py-2">
+          📅 Contract Duration: <span className="font-medium">{contractMonths} month{contractMonths !== 1 ? 's' : ''}</span>
+        </div>
+      )}
+
+      {/* Initial Payment (Down Payment / Signing Bonus) */}
+      <div>
+        <Label htmlFor="initial_payment">
+          Initial Payment <span className="text-slate-400 font-normal">(optional)</span>
+        </Label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+          <Input
+            id="initial_payment"
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={formData.initial_payment}
+            onChange={(e) => setFormData(prev => ({ ...prev, initial_payment: e.target.value }))}
+            className="pl-8 bg-white"
+          />
+        </div>
+        <p className="text-xs text-slate-500 mt-1">
+          Down payment, signing bonus, or deposit received at start
+        </p>
+      </div>
+
+      {/* Final Payment (Completion Bonus) */}
+      <div>
+        <Label htmlFor="final_payment">
+          Final Payment <span className="text-slate-400 font-normal">(optional)</span>
+        </Label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+          <Input
+            id="final_payment"
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={formData.final_payment}
+            onChange={(e) => setFormData(prev => ({ ...prev, final_payment: e.target.value }))}
+            className="pl-8 bg-white"
+          />
+        </div>
+        <p className="text-xs text-slate-500 mt-1">
+          Completion bonus or final payment at end of contract
+        </p>
+      </div>
+
+      {/* Final Payment Date (if different from end date) */}
+      {parseFloat(formData.final_payment) > 0 && (
+        <div>
+          <Label htmlFor="final_payment_date">
+            Final Payment Date <span className="text-slate-400 font-normal">(if different from end date)</span>
+          </Label>
+          <Input
+            id="final_payment_date"
+            type="date"
+            value={formData.final_payment_date}
+            onChange={(e) => setFormData(prev => ({ ...prev, final_payment_date: e.target.value }))}
+            className="bg-white"
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Leave blank if same as end date
+          </p>
+        </div>
+      )}
+
+      {/* Total Contract Value Preview */}
+      {(contractMonths > 0 || initialPayment > 0 || finalPayment > 0) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 bg-white border border-blue-300 rounded-lg space-y-2"
+        >
+          <div className="text-xs text-slate-500">Contract Value Breakdown</div>
+          <div className="space-y-1 text-sm">
+            {initialPayment > 0 && (
+              <div className="flex justify-between">
+                <span className="text-slate-600">Initial Payment:</span>
+                <span className="font-medium">${initialPayment.toLocaleString()}</span>
+              </div>
+            )}
+            {contractMonths > 0 && baseAmount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-slate-600">
+                  Recurring ({contractMonths}mo × ${baseAmount.toLocaleString()}):
+                </span>
+                <span className="font-medium">${recurringTotal.toLocaleString()}</span>
+              </div>
+            )}
+            {finalPayment > 0 && (
+              <div className="flex justify-between">
+                <span className="text-slate-600">Final Payment:</span>
+                <span className="font-medium">${finalPayment.toLocaleString()}</span>
+              </div>
+            )}
+            <div className="flex justify-between pt-2 border-t border-blue-200">
+              <span className="font-semibold text-blue-800">Total Contract Value:</span>
+              <span className="font-bold text-blue-600">${totalContractValue.toLocaleString()}</span>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  )
+}
+
 export function IncomeSources() {
   const { user } = useAuth()
   const [sources, setSources] = useState<IncomeSource[]>([])
@@ -277,7 +467,14 @@ export function IncomeSources() {
     commission_high: '',
     commission_low: '',
     commission_frequency_per_period: '',
-    is_primary: false
+    is_primary: false,
+    // Contract/schedule fields
+    has_schedule: false,
+    start_date: '',
+    end_date: '',
+    initial_payment: '',
+    final_payment: '',
+    final_payment_date: ''
   })
 
   // Fetch income sources
@@ -322,7 +519,13 @@ export function IncomeSources() {
       commission_high: '',
       commission_low: '',
       commission_frequency_per_period: '',
-      is_primary: false
+      is_primary: false,
+      has_schedule: false,
+      start_date: '',
+      end_date: '',
+      initial_payment: '',
+      final_payment: '',
+      final_payment_date: ''
     })
   }
 
@@ -346,7 +549,13 @@ export function IncomeSources() {
           commission_low: parseFloat(formData.commission_low) || 0,
           commission_frequency_per_period: parseFloat(formData.commission_frequency_per_period) || 0,
           is_primary: formData.is_primary,
-          status: 'active'
+          status: 'active',
+          // Contract/schedule fields
+          start_date: formData.has_schedule && formData.start_date ? formData.start_date : null,
+          end_date: formData.has_schedule && formData.end_date ? formData.end_date : null,
+          initial_payment: formData.has_schedule ? parseFloat(formData.initial_payment) || 0 : 0,
+          final_payment: formData.has_schedule ? parseFloat(formData.final_payment) || 0 : 0,
+          final_payment_date: formData.has_schedule && formData.final_payment_date ? formData.final_payment_date : null
         })
       })
       
@@ -389,7 +598,13 @@ export function IncomeSources() {
           commission_high: parseFloat(formData.commission_high) || 0,
           commission_low: parseFloat(formData.commission_low) || 0,
           commission_frequency_per_period: parseFloat(formData.commission_frequency_per_period) || 0,
-          is_primary: formData.is_primary
+          is_primary: formData.is_primary,
+          // Contract/schedule fields
+          start_date: formData.has_schedule && formData.start_date ? formData.start_date : null,
+          end_date: formData.has_schedule && formData.end_date ? formData.end_date : null,
+          initial_payment: formData.has_schedule ? parseFloat(formData.initial_payment) || 0 : 0,
+          final_payment: formData.has_schedule ? parseFloat(formData.final_payment) || 0 : 0,
+          final_payment_date: formData.has_schedule && formData.final_payment_date ? formData.final_payment_date : null
         })
       })
       
@@ -436,6 +651,7 @@ export function IncomeSources() {
 
   const startEdit = (source: IncomeSource) => {
     setEditingSource(source)
+    const hasSchedule = Boolean(source.start_date || source.end_date || source.initial_payment || source.final_payment)
     setFormData({
       name: source.name,
       description: source.description || '',
@@ -447,7 +663,13 @@ export function IncomeSources() {
       commission_high: source.commission_high.toString(),
       commission_low: source.commission_low.toString(),
       commission_frequency_per_period: source.commission_frequency_per_period.toString(),
-      is_primary: source.is_primary
+      is_primary: source.is_primary,
+      has_schedule: hasSchedule,
+      start_date: source.start_date || '',
+      end_date: source.end_date || '',
+      initial_payment: source.initial_payment?.toString() || '',
+      final_payment: source.final_payment?.toString() || '',
+      final_payment_date: source.final_payment_date || ''
     })
   }
 
@@ -584,17 +806,22 @@ export function IncomeSources() {
                   <div className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <h3 className="font-semibold text-slate-900">{source.name}</h3>
-                          {source.is_primary && (
-                            <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-                          )}
-                          {source.is_commission_based && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                              Commission
-                            </span>
-                          )}
-                        </div>
+                                        <div className="flex items-center space-x-2 flex-wrap gap-1">
+                                          <h3 className="font-semibold text-slate-900">{source.name}</h3>
+                                          {source.is_primary && (
+                                            <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                                          )}
+                                          {source.is_commission_based && (
+                                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                                              Commission
+                                            </span>
+                                          )}
+                                          {(source.start_date || source.end_date) && (
+                                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                              Contract
+                                            </span>
+                                          )}
+                                        </div>
                         <p className="text-sm text-slate-600 capitalize">
                           {source.income_type} • {source.pay_frequency.replace('_', ' ')}
                         </p>
@@ -650,47 +877,120 @@ export function IncomeSources() {
                       )}
                     </div>
 
-                    <AnimatePresence>
-                      {expandedCard === source.id && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 text-sm">
-                            <div>
-                              <span className="text-slate-500">Base Amount:</span>
-                              <span className="ml-2 font-medium">
-                                {formatCurrency(source.base_amount)}
-                                {source.income_type === 'hourly' && '/hr'}
-                              </span>
-                            </div>
-                            {source.income_type === 'hourly' && (
-                              <div>
-                                <span className="text-slate-500">Hours/Week:</span>
-                                <span className="ml-2 font-medium">{source.hours_per_week}</span>
-                              </div>
-                            )}
-                            {source.is_commission_based && (
-                              <>
-                                <div>
-                                  <span className="text-slate-500">Commission Range:</span>
-                                  <span className="ml-2 font-medium">
-                                    {formatCurrency(source.commission_low)} - {formatCurrency(source.commission_high)}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-slate-500">Sales/Period:</span>
-                                  <span className="ml-2 font-medium">{source.commission_frequency_per_period}</span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                                    <AnimatePresence>
+                                      {expandedCard === source.id && (
+                                        <motion.div
+                                          initial={{ height: 0, opacity: 0 }}
+                                          animate={{ height: 'auto', opacity: 1 }}
+                                          exit={{ height: 0, opacity: 0 }}
+                                          transition={{ duration: 0.2 }}
+                                          className="overflow-hidden"
+                                        >
+                                          <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 text-sm">
+                                            <div>
+                                              <span className="text-slate-500">Base Amount:</span>
+                                              <span className="ml-2 font-medium">
+                                                {formatCurrency(source.base_amount)}
+                                                {source.income_type === 'hourly' && '/hr'}
+                                              </span>
+                                            </div>
+                                            {source.income_type === 'hourly' && (
+                                              <div>
+                                                <span className="text-slate-500">Hours/Week:</span>
+                                                <span className="ml-2 font-medium">{source.hours_per_week}</span>
+                                              </div>
+                                            )}
+                                            {source.is_commission_based && (
+                                              <>
+                                                <div>
+                                                  <span className="text-slate-500">Commission Range:</span>
+                                                  <span className="ml-2 font-medium">
+                                                    {formatCurrency(source.commission_low)} - {formatCurrency(source.commission_high)}
+                                                  </span>
+                                                </div>
+                                                <div>
+                                                  <span className="text-slate-500">Sales/Period:</span>
+                                                  <span className="ml-2 font-medium">{source.commission_frequency_per_period}</span>
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+                                          {/* Contract Schedule Details */}
+                                          {(source.start_date || source.end_date || source.initial_payment > 0 || source.final_payment > 0) && (
+                                            <div className="mt-4 pt-4 border-t border-slate-200">
+                                              <div className="text-xs font-semibold text-blue-600 mb-2 flex items-center">
+                                                <Calendar className="h-3 w-3 mr-1" />
+                                                Contract Schedule
+                                              </div>
+                                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                                {source.start_date && (
+                                                  <div>
+                                                    <span className="text-slate-500">Start Date:</span>
+                                                    <span className="ml-2 font-medium">
+                                                      {new Date(source.start_date).toLocaleDateString()}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {source.end_date && (
+                                                  <div>
+                                                    <span className="text-slate-500">End Date:</span>
+                                                    <span className="ml-2 font-medium">
+                                                      {new Date(source.end_date).toLocaleDateString()}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {source.initial_payment > 0 && (
+                                                  <div>
+                                                    <span className="text-slate-500">Initial Payment:</span>
+                                                    <span className="ml-2 font-medium text-green-600">
+                                                      {formatCurrency(source.initial_payment)}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {source.final_payment > 0 && (
+                                                  <div>
+                                                    <span className="text-slate-500">Final Payment:</span>
+                                                    <span className="ml-2 font-medium text-green-600">
+                                                      {formatCurrency(source.final_payment)}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {source.final_payment_date && (
+                                                  <div>
+                                                    <span className="text-slate-500">Final Payment Date:</span>
+                                                    <span className="ml-2 font-medium">
+                                                      {new Date(source.final_payment_date).toLocaleDateString()}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                              {/* Contract Duration & Total Value */}
+                                              {source.start_date && source.end_date && (
+                                                <div className="mt-3 p-2 bg-blue-50 rounded text-sm">
+                                                  {(() => {
+                                                    const start = new Date(source.start_date)
+                                                    const end = new Date(source.end_date)
+                                                    const months = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
+                                                    const recurringTotal = source.base_amount * months
+                                                    const total = recurringTotal + (source.initial_payment || 0) + (source.final_payment || 0)
+                                                    return (
+                                                      <div className="flex justify-between items-center">
+                                                        <span className="text-blue-700">
+                                                          {months} month{months !== 1 ? 's' : ''} contract
+                                                        </span>
+                                                        <span className="font-semibold text-blue-800">
+                                                          Total: {formatCurrency(total)}
+                                                        </span>
+                                                      </div>
+                                                    )
+                                                  })()}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
                   </div>
                 </motion.div>
               ))}
@@ -856,6 +1156,29 @@ export function IncomeSources() {
                   {(formData.is_commission_based || formData.income_type === 'commission') && (
                     <CommissionFields 
                       formData={formData} 
+                      setFormData={setFormData}
+                    />
+                  )}
+
+                  {/* Contract Schedule Toggle */}
+                  <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      id="has_schedule"
+                      checked={formData.has_schedule}
+                      onChange={(e) => setFormData({ ...formData, has_schedule: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300"
+                    />
+                    <Label htmlFor="has_schedule" className="text-sm cursor-pointer">
+                      <Clock className="h-4 w-4 inline mr-1 text-blue-500" />
+                      This income has a start/end date (contract, project, etc.)
+                    </Label>
+                  </div>
+
+                  {/* Contract Schedule Fields */}
+                  {formData.has_schedule && (
+                    <ContractScheduleFields 
+                      formData={formData}
                       setFormData={setFormData}
                     />
                   )}

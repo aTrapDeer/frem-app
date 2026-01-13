@@ -1308,6 +1308,10 @@ export type IncomeSource = {
   status: 'active' | 'paused' | 'ended'
   start_date: string | null
   end_date: string | null
+  // Contract/schedule fields
+  initial_payment: number // Down payment / signing bonus at start
+  final_payment: number // Completion payment at end
+  final_payment_date: string | null // When final payment is expected (can differ from end_date)
   is_primary: boolean
   created_at: string
   updated_at: string
@@ -1374,18 +1378,119 @@ function calculateMonthlyEstimates(source: Partial<IncomeSource>): { low: number
     const monthlyCommissionMid = commissionPerPeriodMid * commissionMultiplier
     const monthlyCommissionHigh = commissionPerPeriodHigh * commissionMultiplier
     
+    baseMonthly += monthlyCommissionMid
+    
+    // For contract income with schedule, amortize initial/final payments
+    const { initialAmortized, finalAmortized } = calculateContractAmortization(source)
+    
     return {
-      low: Math.round((baseMonthly + monthlyCommissionLow) * 100) / 100,
-      mid: Math.round((baseMonthly + monthlyCommissionMid) * 100) / 100,
-      high: Math.round((baseMonthly + monthlyCommissionHigh) * 100) / 100
+      low: Math.round((baseMonthly + monthlyCommissionLow - monthlyCommissionMid + initialAmortized + finalAmortized) * 100) / 100,
+      mid: Math.round((baseMonthly + initialAmortized + finalAmortized) * 100) / 100,
+      high: Math.round((baseMonthly + monthlyCommissionHigh - monthlyCommissionMid + initialAmortized + finalAmortized) * 100) / 100
     }
   }
   
+  // For contract income with schedule, amortize initial/final payments over duration
+  const { initialAmortized, finalAmortized } = calculateContractAmortization(source)
+  const totalMonthly = baseMonthly + initialAmortized + finalAmortized
+  
   // Non-commission income has same low/mid/high
   return {
-    low: Math.round(baseMonthly * 100) / 100,
-    mid: Math.round(baseMonthly * 100) / 100,
-    high: Math.round(baseMonthly * 100) / 100
+    low: Math.round(totalMonthly * 100) / 100,
+    mid: Math.round(totalMonthly * 100) / 100,
+    high: Math.round(totalMonthly * 100) / 100
+  }
+}
+
+// Helper to calculate amortized monthly value of initial/final payments
+function calculateContractAmortization(source: Partial<IncomeSource>): { 
+  initialAmortized: number
+  finalAmortized: number
+  contractMonths: number 
+} {
+  const initialPayment = source.initial_payment || 0
+  const finalPayment = source.final_payment || 0
+  
+  // No contract payments to amortize
+  if (initialPayment === 0 && finalPayment === 0) {
+    return { initialAmortized: 0, finalAmortized: 0, contractMonths: 0 }
+  }
+  
+  // Calculate contract duration in months
+  let contractMonths = 0
+  
+  if (source.start_date && source.end_date) {
+    const startDate = new Date(source.start_date)
+    const endDate = new Date(source.end_date)
+    const diffTime = endDate.getTime() - startDate.getTime()
+    const diffDays = diffTime / (1000 * 60 * 60 * 24)
+    contractMonths = Math.max(1, Math.round(diffDays / 30.44))
+  } else if (source.start_date && source.final_payment_date) {
+    // Use final payment date as pseudo end date
+    const startDate = new Date(source.start_date)
+    const endDate = new Date(source.final_payment_date)
+    const diffTime = endDate.getTime() - startDate.getTime()
+    const diffDays = diffTime / (1000 * 60 * 60 * 24)
+    contractMonths = Math.max(1, Math.round(diffDays / 30.44))
+  }
+  
+  // If no duration can be calculated, don't amortize (show as one-time)
+  if (contractMonths === 0) {
+    return { initialAmortized: 0, finalAmortized: 0, contractMonths: 0 }
+  }
+  
+  // Amortize payments over contract duration for monthly estimate
+  const initialAmortized = initialPayment / contractMonths
+  const finalAmortized = finalPayment / contractMonths
+  
+  return { initialAmortized, finalAmortized, contractMonths }
+}
+
+// Get total contract value (useful for displaying full contract worth)
+export function calculateTotalContractValue(source: IncomeSource): {
+  totalValue: number
+  recurringTotal: number
+  initialPayment: number
+  finalPayment: number
+  contractMonths: number
+  isContract: boolean
+} {
+  const hasSchedule = Boolean(source.start_date || source.end_date || source.initial_payment || source.final_payment)
+  
+  if (!hasSchedule) {
+    return {
+      totalValue: 0,
+      recurringTotal: 0,
+      initialPayment: 0,
+      finalPayment: 0,
+      contractMonths: 0,
+      isContract: false
+    }
+  }
+  
+  // Calculate contract duration
+  let contractMonths = 0
+  if (source.start_date && source.end_date) {
+    const startDate = new Date(source.start_date)
+    const endDate = new Date(source.end_date)
+    const diffTime = endDate.getTime() - startDate.getTime()
+    const diffDays = diffTime / (1000 * 60 * 60 * 24)
+    contractMonths = Math.max(1, Math.round(diffDays / 30.44))
+  }
+  
+  // Calculate recurring portion - exclude amortized initial/final to avoid double counting
+  const { initialAmortized, finalAmortized } = calculateContractAmortization(source)
+  const recurringTotal = (source.estimated_monthly_mid - initialAmortized - finalAmortized) * contractMonths
+  
+  const totalValue = recurringTotal + (source.initial_payment || 0) + (source.final_payment || 0)
+  
+  return {
+    totalValue: Math.round(totalValue * 100) / 100,
+    recurringTotal: Math.round(recurringTotal * 100) / 100,
+    initialPayment: source.initial_payment || 0,
+    finalPayment: source.final_payment || 0,
+    contractMonths,
+    isContract: true
   }
 }
 
@@ -1409,6 +1514,9 @@ function rowToIncomeSource(row: Record<string, unknown>): IncomeSource {
     status: row.status as IncomeSource['status'],
     start_date: row.start_date as string | null,
     end_date: row.end_date as string | null,
+    initial_payment: (row.initial_payment as number) || 0,
+    final_payment: (row.final_payment as number) || 0,
+    final_payment_date: row.final_payment_date as string | null,
     is_primary: Boolean(row.is_primary),
     created_at: row.created_at as string,
     updated_at: row.updated_at as string
@@ -1444,8 +1552,10 @@ export const createIncomeSource = async (source: Omit<IncomeSource, 'id' | 'crea
       base_amount, hours_per_week, is_commission_based,
       commission_high, commission_low, commission_frequency_per_period,
       estimated_monthly_low, estimated_monthly_mid, estimated_monthly_high,
-      status, start_date, end_date, is_primary, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      status, start_date, end_date,
+      initial_payment, final_payment, final_payment_date,
+      is_primary, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id, source.user_id, source.name, source.description || null,
       source.income_type, source.pay_frequency,
@@ -1456,6 +1566,8 @@ export const createIncomeSource = async (source: Omit<IncomeSource, 'id' | 'crea
       estimates.low, estimates.mid, estimates.high,
       source.status || 'active',
       source.start_date || null, source.end_date || null,
+      source.initial_payment || 0, source.final_payment || 0,
+      source.final_payment_date || null,
       source.is_primary ? 1 : 0, now, now
     ]
   })
@@ -1481,7 +1593,9 @@ export const updateIncomeSource = async (id: string, updates: Partial<IncomeSour
     'name', 'description', 'income_type', 'pay_frequency',
     'base_amount', 'hours_per_week', 'is_commission_based',
     'commission_high', 'commission_low', 'commission_frequency_per_period',
-    'status', 'start_date', 'end_date', 'is_primary'
+    'status', 'start_date', 'end_date',
+    'initial_payment', 'final_payment', 'final_payment_date',
+    'is_primary'
   ]
   
   for (const [key, value] of Object.entries(updates)) {

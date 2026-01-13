@@ -223,11 +223,56 @@ CREATE TABLE side_projects (
 );
 ```
 
+### 11. Income Sources Table
+Manages income streams with support for contract-based/scheduled income.
+
+```sql
+CREATE TABLE income_sources (
+    id TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    income_type TEXT NOT NULL CHECK (income_type IN ('salary', 'hourly', 'commission', 'freelance', 'other')),
+    pay_frequency TEXT NOT NULL CHECK (pay_frequency IN ('weekly', 'biweekly', 'semimonthly', 'monthly', 'variable')),
+    base_amount REAL DEFAULT 0 CHECK (base_amount >= 0),
+    hours_per_week REAL DEFAULT 0 CHECK (hours_per_week >= 0),
+    is_commission_based INTEGER DEFAULT 0,
+    commission_high REAL DEFAULT 0 CHECK (commission_high >= 0),
+    commission_low REAL DEFAULT 0 CHECK (commission_low >= 0),
+    commission_frequency_per_period REAL DEFAULT 0 CHECK (commission_frequency_per_period >= 0),
+    estimated_monthly_low REAL DEFAULT 0,
+    estimated_monthly_mid REAL DEFAULT 0,
+    estimated_monthly_high REAL DEFAULT 0,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'paused', 'ended')),
+    -- Contract/Schedule fields
+    start_date TEXT,                -- When income begins (for contracts)
+    end_date TEXT,                  -- When income ends (for contracts)
+    initial_payment REAL DEFAULT 0, -- Down payment / signing bonus
+    final_payment REAL DEFAULT 0,   -- Completion bonus / final payment
+    final_payment_date TEXT,        -- When final payment is expected (if different from end_date)
+    is_primary INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+**Contract/Schedule Features:**
+- `start_date` / `end_date`: Define contract duration (e.g., 6-month freelance project)
+- `initial_payment`: Down payment or signing bonus received at start
+- `final_payment`: Completion bonus or milestone payment at end
+- `final_payment_date`: Specific date for final payment (useful if different from contract end)
+
+These fields enable tracking of various contract scenarios:
+- Fixed-term contracts (e.g., $500/month for 6 months)
+- Contracts with signing bonuses (e.g., $1000 upfront + $400/month)
+- Milestone-based work (e.g., monthly payments + final delivery payment)
+
 ---
 
 ## Milestones & Progress Tracking
 
-### 11. Financial Milestones Table
+### 12. Financial Milestones Table
 Tracks major financial achievements and roadmap items.
 
 ```sql
