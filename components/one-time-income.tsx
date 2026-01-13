@@ -235,26 +235,26 @@ export function OneTimeIncomeManager() {
       </CardHeader>
       <CardContent>
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
-            <p className="text-sm font-medium text-amber-800 mb-1">Total Received</p>
-            <p className="text-2xl font-bold text-amber-900">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+          <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-3 sm:p-4 border border-amber-200">
+            <p className="text-xs sm:text-sm font-medium text-amber-800 mb-1">Total Received</p>
+            <p className="text-xl sm:text-2xl font-bold text-amber-900">
               ${summary?.totalAmount.toLocaleString() || '0'}
             </p>
             <p className="text-xs text-amber-600 mt-1">{summary?.totalCount || 0} entries</p>
           </div>
 
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-            <p className="text-sm font-medium text-green-800 mb-1">Applied to Goals</p>
-            <p className="text-2xl font-bold text-green-900">
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-3 sm:p-4 border border-green-200">
+            <p className="text-xs sm:text-sm font-medium text-green-800 mb-1">Applied to Goals</p>
+            <p className="text-xl sm:text-2xl font-bold text-green-900">
               ${summary?.appliedAmount.toLocaleString() || '0'}
             </p>
             <p className="text-xs text-green-600 mt-1">Contributing to your goals</p>
           </div>
 
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-            <p className="text-sm font-medium text-blue-800 mb-1">Available to Apply</p>
-            <p className="text-2xl font-bold text-blue-900">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-3 sm:p-4 border border-blue-200">
+            <p className="text-xs sm:text-sm font-medium text-blue-800 mb-1">Available to Apply</p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-900">
               ${summary?.unappliedAmount.toLocaleString() || '0'}
             </p>
             <p className="text-xs text-blue-600 mt-1">
@@ -282,34 +282,36 @@ export function OneTimeIncomeManager() {
                       : 'bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 ${config.color} rounded-lg flex items-center justify-center`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 shrink-0 ${config.color} rounded-lg flex items-center justify-center`}>
                         <Icon className="h-5 w-5 text-white" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold text-slate-900">{income.description}</h4>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-semibold text-slate-900 truncate">{income.description}</h4>
                           {income.applied_to_goals && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1 whitespace-nowrap">
                               <Check className="h-3 w-3" />
                               Applied
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
                           <span>{config.label}</span>
-                          <span>•</span>
-                          <Calendar className="h-3 w-3" />
-                          <span>{new Date(income.income_date).toLocaleDateString()}</span>
+                          <span className="hidden sm:inline">•</span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            <span>{new Date(income.income_date).toLocaleDateString()}</span>
+                          </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <p className="text-xl font-bold text-emerald-600">
+                    <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pl-[52px] sm:pl-0">
+                      <p className="text-xl font-bold text-emerald-600 whitespace-nowrap">
                         +${income.amount.toLocaleString()}
                       </p>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         {!income.applied_to_goals && goals.length > 0 && (
                           <Button
                             variant="ghost"
@@ -317,8 +319,8 @@ export function OneTimeIncomeManager() {
                             onClick={() => setShowApplyModal(income)}
                             className="h-8 px-2 hover:bg-green-100 text-green-600"
                           >
-                            <Target className="h-4 w-4 mr-1" />
-                            Apply
+                            <Target className="h-4 w-4 sm:mr-1" />
+                            <span className="hidden sm:inline">Apply</span>
                           </Button>
                         )}
                         <Button
@@ -343,7 +345,7 @@ export function OneTimeIncomeManager() {
                     </div>
                   </div>
                   {income.notes && (
-                    <p className="text-sm text-slate-500 mt-2 pl-13">{income.notes}</p>
+                    <p className="text-sm text-slate-500 mt-2 pl-[52px]">{income.notes}</p>
                   )}
                 </motion.div>
               )

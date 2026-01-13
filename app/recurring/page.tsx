@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Calendar, DollarSign, Plus, Trash2, RefreshCw, List, Wallet, Receipt } from "lucide-react"
+import { Calendar, DollarSign, Plus, Trash2, RefreshCw, List, Wallet, Receipt, Pencil, X } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
@@ -37,6 +37,14 @@ export default function RecurringExpenses() {
   const [activeTab, setActiveTab] = useState<'income' | 'expenses'>('income')
 
   const [newExpense, setNewExpense] = useState({
+    name: "",
+    amount: "",
+    category: "",
+    dueDate: "",
+  })
+  const [editingExpense, setEditingExpense] = useState<RecurringExpense | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editForm, setEditForm] = useState({
     name: "",
     amount: "",
     category: "",
@@ -119,6 +127,54 @@ export default function RecurringExpenses() {
       }
     } catch (error) {
       console.error('Error deleting expense:', error)
+    }
+  }
+
+  const openEditModal = (expense: RecurringExpense) => {
+    setEditingExpense(expense)
+    setEditForm({
+      name: expense.name,
+      amount: expense.amount.toString(),
+      category: expense.category,
+      dueDate: expense.due_date.toString(),
+    })
+    setShowEditModal(true)
+  }
+
+  const closeEditModal = () => {
+    setEditingExpense(null)
+    setShowEditModal(false)
+    setEditForm({ name: "", amount: "", category: "", dueDate: "" })
+  }
+
+  const updateExpense = async () => {
+    if (!editingExpense || !editForm.name || !editForm.amount || !editForm.category || !editForm.dueDate || !user) return
+    
+    try {
+      setSubmitting(true)
+      const response = await fetch('/api/recurring', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingExpense.id,
+          name: editForm.name,
+          amount: parseFloat(editForm.amount),
+          category: editForm.category.toLowerCase(),
+          due_date: parseInt(editForm.dueDate),
+        })
+      })
+      
+      if (response.ok) {
+        const updatedExpense = await response.json()
+        setExpenses(prev => prev.map(exp => 
+          exp.id === editingExpense.id ? updatedExpense : exp
+        ))
+        closeEditModal()
+      }
+    } catch (error) {
+      console.error('Error updating expense:', error)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -234,6 +290,97 @@ export default function RecurringExpenses() {
           )}
 
           {/* Expenses Tab */}
+          {/* Edit Expense Modal */}
+          {showEditModal && editingExpense && (
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-800">Edit Expense</h3>
+                  <Button variant="ghost" size="sm" onClick={closeEditModal}>
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="edit-expense-name">Expense Name</Label>
+                    <Input
+                      id="edit-expense-name"
+                      placeholder="e.g., Netflix, Rent"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      className="bg-white border-gray-200"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="edit-expense-amount">Monthly Amount</Label>
+                    <Input
+                      id="edit-expense-amount"
+                      type="number"
+                      placeholder="0.00"
+                      value={editForm.amount}
+                      onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                      className="bg-white border-gray-200"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="edit-expense-category">Category</Label>
+                    <select
+                      id="edit-expense-category"
+                      value={editForm.category}
+                      onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                      className="w-full h-10 px-3 py-2 bg-white border border-gray-200 rounded-md text-sm"
+                    >
+                      <option value="">Select category</option>
+                      <option value="housing">🏠 Housing</option>
+                      <option value="utilities">⚡ Utilities</option>
+                      <option value="entertainment">🎬 Entertainment</option>
+                      <option value="health">⚕️ Health</option>
+                      <option value="transportation">🚗 Transportation</option>
+                      <option value="food">🍕 Food</option>
+                      <option value="subscriptions">📺 Subscriptions</option>
+                      <option value="insurance">🛡️ Insurance</option>
+                      <option value="other">📦 Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="edit-expense-due">Due Date (Day of Month)</Label>
+                    <Input
+                      id="edit-expense-due"
+                      type="number"
+                      min="1"
+                      max="31"
+                      placeholder="1-31"
+                      value={editForm.dueDate}
+                      onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
+                      className="bg-white border-gray-200"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <Button 
+                      variant="outline" 
+                      onClick={closeEditModal}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={updateExpense}
+                      disabled={submitting || !editForm.name || !editForm.amount || !editForm.category || !editForm.dueDate}
+                      className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white disabled:opacity-50"
+                    >
+                      {submitting ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'expenses' && (
           <>
           {/* Summary Cards */}
@@ -400,6 +547,15 @@ export default function RecurringExpenses() {
                           <p className="text-sm text-gray-600">/month</p>
                         </div>
                         <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEditModal(expense)}
+                            className="border-slate-200 text-slate-600 hover:bg-slate-50 bg-transparent"
+                            title="Edit expense"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"

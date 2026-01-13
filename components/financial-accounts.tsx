@@ -172,13 +172,13 @@ export function FinancialAccounts() {
       </CardHeader>
       <CardContent>
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-            <div className="flex items-center gap-2 mb-2">
-              <Wallet className="h-5 w-5 text-blue-600" />
-              <span className="text-sm font-medium text-blue-800">Checking</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-3 sm:p-4 border border-blue-200">
+            <div className="flex items-center gap-2 mb-1 sm:mb-2">
+              <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+              <span className="text-xs sm:text-sm font-medium text-blue-800">Checking</span>
             </div>
-            <p className="text-2xl font-bold text-blue-900">
+            <p className="text-xl sm:text-2xl font-bold text-blue-900">
               ${summary?.totalChecking.toLocaleString() || '0'}
             </p>
             <p className="text-xs text-blue-600 mt-1">
@@ -186,12 +186,12 @@ export function FinancialAccounts() {
             </p>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
-            <div className="flex items-center gap-2 mb-2">
-              <PiggyBank className="h-5 w-5 text-purple-600" />
-              <span className="text-sm font-medium text-purple-800">Savings</span>
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-3 sm:p-4 border border-purple-200">
+            <div className="flex items-center gap-2 mb-1 sm:mb-2">
+              <PiggyBank className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+              <span className="text-xs sm:text-sm font-medium text-purple-800">Savings</span>
             </div>
-            <p className="text-2xl font-bold text-purple-900">
+            <p className="text-xl sm:text-2xl font-bold text-purple-900">
               ${summary?.totalSavings.toLocaleString() || '0'}
             </p>
             <p className="text-xs text-purple-600 mt-1">
@@ -199,12 +199,12 @@ export function FinancialAccounts() {
             </p>
           </div>
 
-          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 border border-emerald-200">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="h-5 w-5 text-emerald-600" />
-              <span className="text-sm font-medium text-emerald-800">Total Balance</span>
+          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-3 sm:p-4 border border-emerald-200">
+            <div className="flex items-center gap-2 mb-1 sm:mb-2">
+              <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+              <span className="text-xs sm:text-sm font-medium text-emerald-800">Total Balance</span>
             </div>
-            <p className="text-2xl font-bold text-emerald-900">
+            <p className="text-xl sm:text-2xl font-bold text-emerald-900">
               ${summary?.totalBalance.toLocaleString() || '0'}
             </p>
             <p className="text-xs text-emerald-600 mt-1">All accounts</p>
@@ -226,9 +226,9 @@ export function FinancialAccounts() {
                     : 'bg-purple-50/50 border-purple-200'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center ${
                       account.account_type === 'checking' 
                         ? 'bg-blue-500' 
                         : 'bg-purple-500'
@@ -238,36 +238,38 @@ export function FinancialAccounts() {
                         : <PiggyBank className="h-5 w-5 text-white" />
                       }
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-slate-900">{account.name}</h4>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-semibold text-slate-900 truncate">{account.name}</h4>
                         {account.is_primary && (
-                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full whitespace-nowrap">
                             Primary
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
                         <span className="capitalize">{account.account_type}</span>
                         {account.institution && (
                           <>
-                            <span>•</span>
-                            <Building2 className="h-3 w-3" />
-                            <span>{account.institution}</span>
+                            <span className="hidden sm:inline">•</span>
+                            <span className="flex items-center gap-1">
+                              <Building2 className="h-3 w-3 shrink-0" />
+                              <span className="truncate max-w-[120px]">{account.institution}</span>
+                            </span>
                           </>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <p className={`text-xl font-bold ${
+                  <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pl-[52px] sm:pl-0">
+                    <p className={`text-xl font-bold whitespace-nowrap ${
                       account.account_type === 'checking' 
                         ? 'text-blue-700' 
                         : 'text-purple-700'
                     }`}>
                       ${account.balance.toLocaleString()}
                     </p>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -288,7 +290,7 @@ export function FinancialAccounts() {
                   </div>
                 </div>
                 {account.notes && (
-                  <p className="text-sm text-slate-500 mt-2 pl-13">{account.notes}</p>
+                  <p className="text-sm text-slate-500 mt-2 pl-[52px]">{account.notes}</p>
                 )}
               </motion.div>
             ))}
