@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect, Suspense, useCallback } from "react"
+import React, { useState, useRef, useEffect, Suspense } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -152,31 +152,6 @@ export default function SummaryPage() {
   const [projections, setProjections] = useState<ProjectionSummary | null>(null)
   const [monthlyProjections, setMonthlyProjections] = useState<MonthlyProjection[]>([])
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0)
-  
-  // Handlers for month navigation
-  const goToPrevMonth = useCallback(() => {
-    console.log('goToPrevMonth called, current:', selectedMonthIndex)
-    setSelectedMonthIndex(prev => {
-      const newVal = Math.max(0, prev - 1)
-      console.log('Setting month to:', newVal)
-      return newVal
-    })
-  }, [selectedMonthIndex])
-  
-  const goToNextMonth = useCallback(() => {
-    console.log('goToNextMonth called, current:', selectedMonthIndex, 'max:', monthlyProjections.length - 1)
-    setSelectedMonthIndex(prev => {
-      const newVal = Math.min(monthlyProjections.length - 1, prev + 1)
-      console.log('Setting month to:', newVal)
-      return newVal
-    })
-  }, [selectedMonthIndex, monthlyProjections.length])
-  
-  const goToMonth = useCallback((idx: number) => {
-    console.log('goToMonth called:', idx)
-    setSelectedMonthIndex(idx)
-  }, [])
-  
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
 
@@ -217,7 +192,7 @@ export default function SummaryPage() {
           const projectionsData = await projectionsRes.json()
           setProjections(projectionsData)
         }
-
+        
         if (monthlyRes.ok) {
           const monthlyData = await monthlyRes.json()
           console.log('Monthly projections loaded:', monthlyData)
@@ -282,9 +257,9 @@ export default function SummaryPage() {
   // Calculate average goal progress from selected month or projections
   const goalProgress = selectedMonth?.summary.totalGoalProgress 
     || (projections?.goals && projections.goals.length > 0
-      ? Math.round(projections.goals.reduce((sum, g) => sum + g.progressPercentage, 0) / projections.goals.length)
-      : financialData?.goals && financialData.goals.length > 0
-        ? Math.round(financialData.goals.reduce((sum, g) => sum + (g.current_amount / g.target_amount * 100), 0) / financialData.goals.length)
+    ? Math.round(projections.goals.reduce((sum, g) => sum + g.progressPercentage, 0) / projections.goals.length)
+    : financialData?.goals && financialData.goals.length > 0
+      ? Math.round(financialData.goals.reduce((sum, g) => sum + (g.current_amount / g.target_amount * 100), 0) / financialData.goals.length)
         : 0)
   
   // Calculate months until goals complete (average)
@@ -356,11 +331,7 @@ export default function SummaryPage() {
 
           {/* Month Navigation */}
           {monthlyProjections.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.05 }}
-            >
+            <div className="relative z-10">
               <Card className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100">
                 <CardContent className="p-3 sm:p-4">
                   {/* Mobile Layout */}
@@ -383,14 +354,19 @@ export default function SummaryPage() {
                     </div>
                     
                     {/* Navigation Controls */}
-                    <div className="flex items-center justify-between sm:justify-end gap-2">
+                    <div className="flex items-center justify-between sm:justify-end gap-2 relative z-20">
                       <button
                         type="button"
-                        onClick={goToPrevMonth}
+                        aria-label="Previous month"
+                        onClick={() => {
+                          console.log('Prev button clicked!')
+                          setSelectedMonthIndex(prev => Math.max(0, prev - 1))
+                        }}
                         disabled={selectedMonthIndex === 0}
-                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer"
+                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer select-none"
+                        style={{ pointerEvents: 'auto' }}
                       >
-                        <ChevronLeft className="h-4 w-4" />
+                        <ChevronLeft className="h-4 w-4 pointer-events-none" />
                       </button>
                       
                       {/* Month indicator - hidden on mobile, shown on sm+ */}
@@ -399,12 +375,17 @@ export default function SummaryPage() {
                           <button
                             type="button"
                             key={idx}
-                            onClick={() => goToMonth(idx)}
+                            aria-label={`Go to month ${idx + 1}`}
+                            onClick={() => {
+                              console.log('Dot clicked:', idx)
+                              setSelectedMonthIndex(idx)
+                            }}
                             className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
                               idx === selectedMonthIndex 
                                 ? 'bg-indigo-600 w-3' 
                                 : 'bg-slate-300 hover:bg-slate-400'
                             }`}
+                            style={{ pointerEvents: 'auto' }}
                           />
                         ))}
                         {monthlyProjections.length > 6 && (
@@ -419,18 +400,27 @@ export default function SummaryPage() {
                       
                       <button
                         type="button"
-                        onClick={goToNextMonth}
+                        aria-label="Next month"
+                        onClick={() => {
+                          console.log('Next button clicked!')
+                          setSelectedMonthIndex(prev => Math.min(monthlyProjections.length - 1, prev + 1))
+                        }}
                         disabled={selectedMonthIndex >= monthlyProjections.length - 1}
-                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer"
+                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer select-none"
+                        style={{ pointerEvents: 'auto' }}
                       >
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-4 w-4 pointer-events-none" />
                       </button>
                       
                       {selectedMonthIndex !== 0 && (
                         <button
                           type="button"
-                          onClick={() => goToMonth(0)}
+                          onClick={() => {
+                            console.log('Reset clicked!')
+                            setSelectedMonthIndex(0)
+                          }}
                           className="text-indigo-600 text-xs sm:text-sm px-2 sm:px-3 hover:underline cursor-pointer"
+                          style={{ pointerEvents: 'auto' }}
                         >
                           Reset
                         </button>
@@ -469,7 +459,7 @@ export default function SummaryPage() {
                   )}
                 </CardContent>
               </Card>
-            </motion.div>
+            </div>
           )}
 
           {/* KPI Strip - Dynamic metrics based on selected month */}
