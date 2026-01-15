@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { motion, AnimatePresence } from "framer-motion"
 import { Menu, X, User, Settings, LogOut, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -100,9 +101,11 @@ export function Navbar() {
                   className="flex items-center space-x-2 focus-ring"
                 >
                   {user.image ? (
-                    <img 
+                    <Image 
                       src={user.image} 
                       alt="Profile" 
+                      width={24}
+                      height={24}
                       className="h-6 w-6 rounded-full object-cover"
                     />
                   ) : (

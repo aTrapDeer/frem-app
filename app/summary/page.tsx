@@ -103,14 +103,6 @@ interface MonthlyProjection {
   }
 }
 
-interface Transaction {
-  id: string
-  type: string
-  amount: number
-  description?: string
-  date?: string
-}
-
 interface RecurringExpense {
   id: string
   name: string
@@ -160,7 +152,6 @@ export default function SummaryPage() {
   const [projections, setProjections] = useState<ProjectionSummary | null>(null)
   const [monthlyProjections, setMonthlyProjections] = useState<MonthlyProjection[]>([])
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0)
-  const [monthlyLoading, setMonthlyLoading] = useState(false)
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
 
@@ -188,7 +179,6 @@ export default function SummaryPage() {
           goals: goalsData, 
           recurringExpenses: recurringExpensesData, 
           sideProjects: sideProjectsData, 
-          transactions: recentTransactionsData, 
           targetCalculation, 
           incomeSummary: incomeSummaryData,
           oneTimeNet
@@ -365,20 +355,24 @@ export default function SummaryPage() {
                     
                     {/* Navigation Controls */}
                     <div className="flex items-center justify-between sm:justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedMonthIndex(prev => Math.max(0, prev - 1))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedMonthIndex > 0) {
+                            setSelectedMonthIndex(selectedMonthIndex - 1)
+                          }
+                        }}
                         disabled={selectedMonthIndex === 0}
-                        className="h-9 w-9 p-0 flex-shrink-0"
+                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                       >
                         <ChevronLeft className="h-4 w-4" />
-                      </Button>
+                      </button>
                       
                       {/* Month indicator - hidden on mobile, shown on sm+ */}
                       <div className="hidden sm:flex items-center gap-1 px-2">
                         {monthlyProjections.slice(0, Math.min(6, monthlyProjections.length)).map((_, idx) => (
                           <button
+                            type="button"
                             key={idx}
                             onClick={() => setSelectedMonthIndex(idx)}
                             className={`w-2 h-2 rounded-full transition-all ${
@@ -398,25 +392,27 @@ export default function SummaryPage() {
                         {selectedMonthIndex + 1}/{monthlyProjections.length}
                       </span>
                       
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedMonthIndex(prev => Math.min(monthlyProjections.length - 1, prev + 1))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedMonthIndex < monthlyProjections.length - 1) {
+                            setSelectedMonthIndex(selectedMonthIndex + 1)
+                          }
+                        }}
                         disabled={selectedMonthIndex >= monthlyProjections.length - 1}
-                        className="h-9 w-9 p-0 flex-shrink-0"
+                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                       >
                         <ChevronRight className="h-4 w-4" />
-                      </Button>
+                      </button>
                       
                       {selectedMonthIndex !== 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
+                          type="button"
                           onClick={() => setSelectedMonthIndex(0)}
-                          className="text-indigo-600 text-xs sm:text-sm px-2 sm:px-3"
+                          className="text-indigo-600 text-xs sm:text-sm px-2 sm:px-3 hover:underline"
                         >
                           Reset
-                        </Button>
+                        </button>
                       )}
                     </div>
                   </div>
