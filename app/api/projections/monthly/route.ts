@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
     const session = await auth()
     
     if (!session?.user?.id) {
+      console.log('[Monthly Projections] Unauthorized request')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -63,6 +64,8 @@ export async function GET(request: NextRequest) {
     const monthOffset = parseInt(searchParams.get('monthOffset') || '0', 10)
     // Limit to 12 months for performance
     const monthsToFetch = Math.min(parseInt(searchParams.get('months') || '12', 10), 24)
+    
+    console.log('[Monthly Projections] Fetching for user:', userId, 'months:', monthsToFetch)
 
     // Fetch all data
     const [goals, recurringExpenses, incomeSources, sideProjects, monthlyTransactions] = await Promise.all([
@@ -319,13 +322,15 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    console.log('[Monthly Projections] Returning', monthlyProjections.length, 'months of projections')
+    
     return NextResponse.json({
       monthlyProjections,
       currentMonthOffset: monthOffset,
       totalGoals: activeGoals.length
     })
   } catch (error) {
-    console.error('Error fetching monthly projections:', error)
+    console.error('[Monthly Projections] Error:', error)
     return NextResponse.json({ error: 'Failed to fetch monthly projections' }, { status: 500 })
   }
 }

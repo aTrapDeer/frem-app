@@ -195,8 +195,12 @@ export default function SummaryPage() {
 
         if (monthlyRes.ok) {
           const monthlyData = await monthlyRes.json()
+          console.log('Monthly projections loaded:', monthlyData)
           if (monthlyData.monthlyProjections && Array.isArray(monthlyData.monthlyProjections)) {
             setMonthlyProjections(monthlyData.monthlyProjections)
+            console.log('Set monthly projections:', monthlyData.monthlyProjections.length, 'months')
+          } else {
+            console.error('Invalid monthly projections data:', monthlyData)
           }
         } else {
           console.error('Monthly projections fetch failed:', monthlyRes.status)
@@ -357,13 +361,13 @@ export default function SummaryPage() {
                     <div className="flex items-center justify-between sm:justify-end gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (selectedMonthIndex > 0) {
-                            setSelectedMonthIndex(selectedMonthIndex - 1)
-                          }
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setSelectedMonthIndex(prev => Math.max(0, prev - 1))
                         }}
                         disabled={selectedMonthIndex === 0}
-                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
@@ -374,8 +378,12 @@ export default function SummaryPage() {
                           <button
                             type="button"
                             key={idx}
-                            onClick={() => setSelectedMonthIndex(idx)}
-                            className={`w-2 h-2 rounded-full transition-all ${
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setSelectedMonthIndex(idx)
+                            }}
+                            className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
                               idx === selectedMonthIndex 
                                 ? 'bg-indigo-600 w-3' 
                                 : 'bg-slate-300 hover:bg-slate-400'
@@ -394,13 +402,13 @@ export default function SummaryPage() {
                       
                       <button
                         type="button"
-                        onClick={() => {
-                          if (selectedMonthIndex < monthlyProjections.length - 1) {
-                            setSelectedMonthIndex(selectedMonthIndex + 1)
-                          }
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setSelectedMonthIndex(prev => Math.min(monthlyProjections.length - 1, prev + 1))
                         }}
                         disabled={selectedMonthIndex >= monthlyProjections.length - 1}
-                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                        className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer"
                       >
                         <ChevronRight className="h-4 w-4" />
                       </button>
@@ -408,8 +416,12 @@ export default function SummaryPage() {
                       {selectedMonthIndex !== 0 && (
                         <button
                           type="button"
-                          onClick={() => setSelectedMonthIndex(0)}
-                          className="text-indigo-600 text-xs sm:text-sm px-2 sm:px-3 hover:underline"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setSelectedMonthIndex(0)
+                          }}
+                          className="text-indigo-600 text-xs sm:text-sm px-2 sm:px-3 hover:underline cursor-pointer"
                         >
                           Reset
                         </button>

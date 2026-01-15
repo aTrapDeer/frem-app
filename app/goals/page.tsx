@@ -22,18 +22,8 @@ const goalSchema = z.object({
   start_date: z.string().optional(),
   deadline: z.string().min(1, "Deadline is required"),
   category: z.enum(["emergency", "vacation", "car", "house", "debt", "investment", "other"]),
-  interest_rate: z.preprocess(
-    (value) => {
-      if (value === '' || value === undefined || value === null) return undefined
-      const num = Number(value)
-      return isNaN(num) ? undefined : num
-    },
-    z.number().min(0).max(100).optional()
-  ),
-  urgency_score: z.preprocess(
-    (value) => (typeof value === 'string' ? parseInt(value, 10) : value),
-    z.number().min(1).max(5)
-  ),
+  interest_rate: z.coerce.number().min(0).max(100).optional(),
+  urgency_score: z.coerce.number().min(1).max(5),
 })
 
 type GoalFormData = z.infer<typeof goalSchema>
