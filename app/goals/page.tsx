@@ -22,11 +22,19 @@ const goalSchema = z.object({
   start_date: z.string().optional(),
   deadline: z.string().min(1, "Deadline is required"),
   category: z.enum(["emergency", "vacation", "car", "house", "debt", "investment", "other"]),
-  interest_rate: z.coerce.number().min(0).max(100).optional(),
-  urgency_score: z.coerce.number().min(1).max(5),
+  interest_rate: z.number().min(0).max(100).optional(),
+  urgency_score: z.number().min(1).max(5),
 })
 
-type GoalFormData = z.infer<typeof goalSchema>
+type GoalFormData = {
+  title: string
+  amount: number
+  start_date?: string
+  deadline: string
+  category: "emergency" | "vacation" | "car" | "house" | "debt" | "investment" | "other"
+  interest_rate?: number
+  urgency_score: number
+}
 
 // Urgency labels
 const urgencyLevels = [

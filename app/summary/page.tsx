@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect, Suspense } from "react"
+import React, { useState, useRef, useEffect, Suspense, useCallback } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -152,6 +152,31 @@ export default function SummaryPage() {
   const [projections, setProjections] = useState<ProjectionSummary | null>(null)
   const [monthlyProjections, setMonthlyProjections] = useState<MonthlyProjection[]>([])
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0)
+  
+  // Handlers for month navigation
+  const goToPrevMonth = useCallback(() => {
+    console.log('goToPrevMonth called, current:', selectedMonthIndex)
+    setSelectedMonthIndex(prev => {
+      const newVal = Math.max(0, prev - 1)
+      console.log('Setting month to:', newVal)
+      return newVal
+    })
+  }, [selectedMonthIndex])
+  
+  const goToNextMonth = useCallback(() => {
+    console.log('goToNextMonth called, current:', selectedMonthIndex, 'max:', monthlyProjections.length - 1)
+    setSelectedMonthIndex(prev => {
+      const newVal = Math.min(monthlyProjections.length - 1, prev + 1)
+      console.log('Setting month to:', newVal)
+      return newVal
+    })
+  }, [selectedMonthIndex, monthlyProjections.length])
+  
+  const goToMonth = useCallback((idx: number) => {
+    console.log('goToMonth called:', idx)
+    setSelectedMonthIndex(idx)
+  }, [])
+  
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
 
@@ -361,11 +386,7 @@ export default function SummaryPage() {
                     <div className="flex items-center justify-between sm:justify-end gap-2">
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setSelectedMonthIndex(prev => Math.max(0, prev - 1))
-                        }}
+                        onClick={goToPrevMonth}
                         disabled={selectedMonthIndex === 0}
                         className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer"
                       >
@@ -378,11 +399,7 @@ export default function SummaryPage() {
                           <button
                             type="button"
                             key={idx}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setSelectedMonthIndex(idx)
-                            }}
+                            onClick={() => goToMonth(idx)}
                             className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
                               idx === selectedMonthIndex 
                                 ? 'bg-indigo-600 w-3' 
@@ -402,11 +419,7 @@ export default function SummaryPage() {
                       
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setSelectedMonthIndex(prev => Math.min(monthlyProjections.length - 1, prev + 1))
-                        }}
+                        onClick={goToNextMonth}
                         disabled={selectedMonthIndex >= monthlyProjections.length - 1}
                         className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer"
                       >
@@ -416,11 +429,7 @@ export default function SummaryPage() {
                       {selectedMonthIndex !== 0 && (
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setSelectedMonthIndex(0)
-                          }}
+                          onClick={() => goToMonth(0)}
                           className="text-indigo-600 text-xs sm:text-sm px-2 sm:px-3 hover:underline cursor-pointer"
                         >
                           Reset
