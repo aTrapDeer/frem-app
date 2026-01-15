@@ -75,7 +75,7 @@ IMPORTANT for growthOpportunities:
 - Be realistic about risk and effort required`
 
 function generateUserPrompt(context: Awaited<ReturnType<typeof buildAIContext>>): string {
-  const { incomeSources, goals, expenses, sideProjects, accounts, oneTimeIncome, metrics } = context
+  const { incomeSources, goals, expenses, sideProjects, accounts, oneTimeIncome, oneTimeTransactions, metrics } = context
   
   let prompt = `Here's my current financial situation:\n\n`
   
@@ -90,7 +90,8 @@ function generateUserPrompt(context: Awaited<ReturnType<typeof buildAIContext>>)
   if (incomeSources.sources.length > 0) {
     prompt += `- Income Sources:\n`
     incomeSources.sources.forEach(source => {
-      prompt += `  * ${source.name} (${source.type}${source.isCommissionBased ? ', commission-based' : ''}): $${source.monthlyEstimate.mid.toLocaleString()}/month\n`
+      const description = source.description ? ` - ${source.description}` : ''
+      prompt += `  * ${source.name} (${source.type}${source.isCommissionBased ? ', commission-based' : ''}): $${source.monthlyEstimate.mid.toLocaleString()}/month${description}\n`
     })
   }
   
@@ -122,12 +123,28 @@ function generateUserPrompt(context: Awaited<ReturnType<typeof buildAIContext>>)
       prompt += `- Already Applied to Goals: $${oneTimeIncome.appliedTotal.toLocaleString()}\n`
     }
   }
+
+  if (oneTimeTransactions.length > 0) {
+    const oneTimeNet = oneTimeTransactions.reduce((sum, t) => {
+      return sum + (t.type === 'income' ? t.amount : -t.amount)
+    }, 0)
+    prompt += `\n**ONE-TIME TRANSACTIONS (CURRENT MONTH)**:\n`
+    prompt += `- Net Impact: ${oneTimeNet >= 0 ? '+' : ''}$${oneTimeNet.toLocaleString()}\n`
+    oneTimeTransactions.slice(0, 10).forEach(transaction => {
+      const description = transaction.description ? ` - ${transaction.description}` : ''
+      prompt += `  * ${transaction.type === 'income' ? 'Income' : 'Expense'}: $${transaction.amount.toLocaleString()} (${transaction.date})${description}\n`
+    })
+    if (oneTimeTransactions.length > 10) {
+      prompt += `  * ...and ${oneTimeTransactions.length - 10} more this month\n`
+    }
+  }
   
   // Expenses section
   prompt += `\n**MONTHLY EXPENSES**: $${metrics.totalMonthlyExpenses.toLocaleString()}\n`
   if (expenses.length > 0) {
     expenses.forEach(expense => {
-      prompt += `- ${expense.name} (${expense.category}): $${expense.amount.toLocaleString()}\n`
+      const description = expense.description ? ` - ${expense.description}` : ''
+      prompt += `- ${expense.name} (${expense.category}): $${expense.amount.toLocaleString()}${description}\n`
     })
   }
   
@@ -137,6 +154,12 @@ function generateUserPrompt(context: Awaited<ReturnType<typeof buildAIContext>>)
     goals.forEach(goal => {
       prompt += `- ${goal.title} (${goal.category}, ${goal.priority} priority)\n`
       prompt += `  Target: $${goal.targetAmount.toLocaleString()} | Current: $${goal.currentAmount.toLocaleString()} (${goal.progressPercentage}%)\n`
+      if (goal.startDate) {
+        prompt += `  Start Date: ${goal.startDate}\n`
+      }
+      if (goal.interestRate) {
+        prompt += `  Estimated Growth: ${goal.interestRate}% annual\n`
+      }
       prompt += `  Deadline: ${goal.deadline} (${goal.monthsRemaining} months remaining)\n`
       prompt += `  Monthly needed: $${goal.monthlyRequired.toLocaleString()}\n`
     })

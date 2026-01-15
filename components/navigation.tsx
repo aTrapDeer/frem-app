@@ -37,12 +37,6 @@ export function Navigation({ currentPage }: NavigationProps) {
               Dashboard
             </Link>
             <Link
-              href="/daily"
-              className={`transition-colors ${isCurrentPage("daily") ? "text-blue-600 font-medium" : "text-gray-700 hover:text-blue-600"}`}
-            >
-              Daily
-            </Link>
-            <Link
               href="/roadmap"
               className={`transition-colors ${isCurrentPage("roadmap") ? "text-blue-600 font-medium" : "text-gray-700 hover:text-blue-600"}`}
             >
@@ -58,7 +52,7 @@ export function Navigation({ currentPage }: NavigationProps) {
               href="/recurring"
               className={`transition-colors ${isCurrentPage("recurring") ? "text-blue-600 font-medium" : "text-gray-700 hover:text-blue-600"}`}
             >
-              Recurring
+              Budget
             </Link>
 
             {/* Account Dropdown */}
@@ -106,12 +100,6 @@ export function Navigation({ currentPage }: NavigationProps) {
                 Dashboard
               </Link>
               <Link
-                href="/daily"
-                className={`px-4 transition-colors ${isCurrentPage("daily") ? "text-blue-600 font-medium" : "text-gray-700 hover:text-blue-600"}`}
-              >
-                Daily
-              </Link>
-              <Link
                 href="/roadmap"
                 className={`px-4 transition-colors ${isCurrentPage("roadmap") ? "text-blue-600 font-medium" : "text-gray-700 hover:text-blue-600"}`}
               >
@@ -127,7 +115,7 @@ export function Navigation({ currentPage }: NavigationProps) {
                 href="/recurring"
                 className={`px-4 transition-colors ${isCurrentPage("recurring") ? "text-blue-600 font-medium" : "text-gray-700 hover:text-blue-600"}`}
               >
-                Recurring
+                Budget
               </Link>
               <div className="px-4 pt-2 border-t border-gray-100">
                 <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white mb-2">

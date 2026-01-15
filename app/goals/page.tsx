@@ -19,9 +19,21 @@ import { useAuth } from "@/contexts/auth-context"
 const goalSchema = z.object({
   title: z.string().min(1, "Goal title is required"),
   amount: z.number().min(1, "Amount must be greater than 0"),
+  start_date: z.string().optional(),
   deadline: z.string().min(1, "Deadline is required"),
   category: z.enum(["emergency", "vacation", "car", "house", "debt", "investment", "other"]),
-  urgency_score: z.number().min(1).max(5),
+  interest_rate: z.preprocess(
+    (value) => {
+      if (value === '' || value === undefined || value === null) return undefined
+      const num = Number(value)
+      return isNaN(num) ? undefined : num
+    },
+    z.number().min(0).max(100).optional()
+  ),
+  urgency_score: z.preprocess(
+    (value) => (typeof value === 'string' ? parseInt(value, 10) : value),
+    z.number().min(1).max(5)
+  ),
 })
 
 type GoalFormData = z.infer<typeof goalSchema>
@@ -40,7 +52,9 @@ interface Goal {
   title: string
   target_amount: number
   current_amount: number
+  start_date: string | null
   deadline: string
+  interest_rate: number | null
   category: string
   status: string
   urgency_score: number // 1-5, higher = more urgent
@@ -101,6 +115,8 @@ export default function GoalsPage() {
     mode: "onChange",
     defaultValues: {
       urgency_score: 3,
+      start_date: "",
+      interest_rate: undefined,
     },
   })
 
@@ -121,7 +137,8 @@ export default function GoalsPage() {
         
         if (goalsRes.ok) {
           const goalsData = await goalsRes.json()
-          setGoals(goalsData)
+          // Filter out cancelled goals as a safeguard
+          setGoals(goalsData.filter((goal: Goal) => goal.status !== 'cancelled'))
         }
         
         if (projectionsRes.ok) {
@@ -158,6 +175,8 @@ export default function GoalsPage() {
           title: data.title,
           target_amount: data.amount,
           current_amount: 0,
+          start_date: data.start_date || null,
+          interest_rate: data.category === 'investment' ? (data.interest_rate ?? null) : null,
           deadline: data.deadline,
           category: data.category,
           urgency_score: data.urgency_score || 3,
@@ -202,6 +221,8 @@ export default function GoalsPage() {
           id: goalId,
           title: updates.title,
           target_amount: updates.amount,
+          start_date: updates.start_date || null,
+          interest_rate: updates.category === 'investment' ? (updates.interest_rate ?? null) : null,
           deadline: updates.deadline,
           category: updates.category,
           urgency_score: updates.urgency_score
@@ -269,7 +290,13 @@ export default function GoalsPage() {
       })
       
       if (response.ok) {
+        // Remove from local state
         setGoals(prev => prev.filter(goal => goal.id !== goalId))
+        // Refresh projections to update dashboard
+        const projectionsRes = await fetch('/api/projections')
+        if (projectionsRes.ok) {
+          setProjections(await projectionsRes.json())
+        }
         setSuccessMessage("Goal deleted successfully!")
         setTimeout(() => setSuccessMessage(""), 5000)
       }
@@ -1051,6 +1078,39 @@ function GoalWizardStep({ step, register, errors, watchedValues, onNext, onPrev,
       return (
         <div className="space-y-4">
           <div>
+            <Label htmlFor="start_date">Start Date (Optional)</Label>
+            <Input
+              id="start_date"
+              type="date"
+              min={new Date().toISOString().split('T')[0]}
+              {...register("start_date")}
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Leave blank to start immediately
+            </p>
+          </div>
+
+          {watchedValues.category === 'investment' && (
+            <div>
+              <Label htmlFor="interest_rate">Estimated Annual Growth % (Optional)</Label>
+              <Input
+                id="interest_rate"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                placeholder="e.g., 10"
+                {...register("interest_rate", {
+                  setValueAs: (value) => (value === "" ? undefined : Number(value))
+                })}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Used to estimate compounding growth for investment goals
+              </p>
+            </div>
+          )}
+
+          <div>
             <Label htmlFor="deadline">When do you want to achieve this?</Label>
             <Input
               id="deadline"
@@ -1072,12 +1132,25 @@ function GoalWizardStep({ step, register, errors, watchedValues, onNext, onPrev,
                 <div className="mt-2 text-sm text-green-700">
                   <div>Goal: <strong>{watchedValues.title}</strong></div>
                   <div>Amount: <strong>${watchedValues.amount.toLocaleString()}</strong></div>
+                  {watchedValues.start_date && (
+                    <div>Start: <strong>{new Date(watchedValues.start_date).toLocaleDateString()}</strong></div>
+                  )}
                   <div>Deadline: <strong>{new Date(watchedValues.deadline).toLocaleDateString()}</strong></div>
                   {(() => {
                     const today = new Date()
                     const deadline = new Date(watchedValues.deadline)
-                    const monthsLeft = Math.max(1, Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30)))
-                    const monthlyTarget = Math.round(watchedValues.amount / monthsLeft)
+                    const startDate = watchedValues.start_date ? new Date(watchedValues.start_date) : today
+                    const effectiveStart = startDate > today ? startDate : today
+                    const monthsLeft = Math.max(1, Math.round((deadline.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24 * 30)))
+                    const annualRate = watchedValues.category === 'investment' && watchedValues.interest_rate
+                      ? Number(watchedValues.interest_rate)
+                      : 0
+                    const monthlyRate = annualRate > 0 ? Math.pow(1 + annualRate / 100, 1 / 12) - 1 : 0
+                    const growthFactor = Math.pow(1 + monthlyRate, monthsLeft)
+                    const rawMonthlyTarget = monthlyRate > 0
+                      ? (watchedValues.amount - growthFactor * 0) * monthlyRate / (growthFactor - 1)
+                      : watchedValues.amount / monthsLeft
+                    const monthlyTarget = Math.round(rawMonthlyTarget)
                     return (
                       <div className="mt-2 p-2 bg-white rounded border border-green-300">
                         <div className="text-green-800 font-semibold">
@@ -1120,15 +1193,18 @@ function GoalWizardStep({ step, register, errors, watchedValues, onNext, onPrev,
                 <label
                   key={level.value}
                   className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${
-                    watchedValues.urgency_score === level.value 
+                    Number(watchedValues.urgency_score) === level.value 
                       ? level.color + ' border-2' 
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <input
                     type="radio"
-                    value={level.value}
-                    {...register("urgency_score", { valueAsNumber: true })}
+                    value={level.value.toString()}
+                    {...register("urgency_score", { 
+                      valueAsNumber: true,
+                      setValueAs: (v) => parseInt(v, 10) 
+                    })}
                     className="sr-only"
                   />
                   <div className="flex-1">
@@ -1159,8 +1235,8 @@ function GoalWizardStep({ step, register, errors, watchedValues, onNext, onPrev,
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800">
                 💡 <strong>How this works:</strong> Goals with higher urgency receive a larger share of your monthly surplus. 
-                A &quot;{urgencyLevels.find(l => l.value === watchedValues.urgency_score)?.label}&quot; goal will get 
-                {watchedValues.urgency_score === 5 ? ' the maximum' : watchedValues.urgency_score === 1 ? ' the minimum' : ' a proportional'} allocation.
+                A &quot;{urgencyLevels.find(l => l.value === Number(watchedValues.urgency_score))?.label}&quot; goal will get 
+                {Number(watchedValues.urgency_score) === 5 ? ' the maximum' : Number(watchedValues.urgency_score) === 1 ? ' the minimum' : ' a proportional'} allocation.
               </p>
             </div>
           )}
@@ -1196,7 +1272,9 @@ function EditGoalModal({ goal, onSave, onCancel, submitting }: EditGoalModalProp
   const [editData, setEditData] = useState({
     title: goal.title,
     amount: goal.target_amount.toString(),
+    start_date: goal.start_date || "",
     deadline: goal.deadline,
+    interest_rate: goal.interest_rate?.toString() || "",
     category: goal.category as GoalFormData['category'],
     urgency_score: goal.urgency_score || 3
   })
@@ -1204,11 +1282,14 @@ function EditGoalModal({ goal, onSave, onCancel, submitting }: EditGoalModalProp
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const amount = parseFloat(editData.amount)
+    const interestRate = editData.interest_rate ? parseFloat(editData.interest_rate) : null
     if (!editData.title || !amount || !editData.deadline || !editData.category) return
     
     onSave(goal.id, {
       title: editData.title,
       amount: amount,
+      start_date: editData.start_date,
+      interest_rate: interestRate ?? undefined,
       deadline: editData.deadline,
       category: editData.category,
       urgency_score: editData.urgency_score
@@ -1266,6 +1347,34 @@ function EditGoalModal({ goal, onSave, onCancel, submitting }: EditGoalModalProp
                 />
               </div>
             </div>
+
+            <div>
+              <Label htmlFor="edit-start-date">Start Date (Optional)</Label>
+              <Input
+                id="edit-start-date"
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={editData.start_date}
+                onChange={(e) => setEditData({ ...editData, start_date: e.target.value })}
+                className="bg-white"
+              />
+            </div>
+
+            {editData.category === 'investment' && (
+              <div>
+                <Label htmlFor="edit-interest-rate">Estimated Annual Growth % (Optional)</Label>
+                <Input
+                  id="edit-interest-rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={editData.interest_rate}
+                  onChange={(e) => setEditData({ ...editData, interest_rate: e.target.value })}
+                  className="bg-white"
+                />
+              </div>
+            )}
 
             <div>
               <Label htmlFor="edit-deadline">Target Date</Label>

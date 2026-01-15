@@ -277,14 +277,14 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Button
-                    onClick={() => router.push('/daily')}
+                    onClick={() => router.push('/recurring')}
                     variant="outline"
                     className="h-auto p-4 flex flex-col items-center space-y-2 bg-transparent"
                   >
                     <DollarSign className="h-6 w-6 text-green-600" />
                     <div className="text-center">
                       <div className="font-semibold">Add Transaction</div>
-                      <div className="text-xs text-slate-600">Log income or expense</div>
+                      <div className="text-xs text-slate-600">One-time income or expense</div>
                     </div>
                   </Button>
                   
@@ -307,8 +307,8 @@ export default function DashboardPage() {
                   >
                     <CreditCard className="h-6 w-6 text-cyan-600" />
                     <div className="text-center">
-                      <div className="font-semibold">Manage Expenses</div>
-                      <div className="text-xs text-slate-600">Recurring payments</div>
+                      <div className="font-semibold">Manage Budget</div>
+                      <div className="text-xs text-slate-600">Income & expenses</div>
                     </div>
                   </Button>
                 </div>

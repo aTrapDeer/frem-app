@@ -1050,6 +1050,17 @@ export function IncomeSources() {
                     />
                   </div>
 
+                  <div>
+                    <Label htmlFor="description">Description (Optional)</Label>
+                    <Input
+                      id="description"
+                      placeholder="e.g., Remote contract, tips included"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      className="bg-white"
+                    />
+                  </div>
+
                   {/* Income Type */}
                   <div>
                     <Label>Income Type</Label>

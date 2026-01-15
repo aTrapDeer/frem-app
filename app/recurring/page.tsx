@@ -5,11 +5,12 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Calendar, DollarSign, Plus, Trash2, RefreshCw, List, Wallet, Receipt, Pencil, X } from "lucide-react"
+import { Calendar, DollarSign, Plus, Trash2, RefreshCw, List, Wallet, Receipt, Pencil, X, Sparkles } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
 import { IncomeSources } from "@/components/income-sources"
+import { OneTimeTransactions } from "@/components/one-time-transactions"
 
 interface RecurringExpense {
   id: string
@@ -34,13 +35,14 @@ export default function RecurringExpenses() {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year' | 'custom'>('month')
-  const [activeTab, setActiveTab] = useState<'income' | 'expenses'>('income')
+  const [activeTab, setActiveTab] = useState<'income' | 'expenses' | 'one-time'>('income')
 
   const [newExpense, setNewExpense] = useState({
     name: "",
     amount: "",
     category: "",
     dueDate: "",
+    description: "",
   })
   const [editingExpense, setEditingExpense] = useState<RecurringExpense | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -49,6 +51,7 @@ export default function RecurringExpenses() {
     amount: "",
     category: "",
     dueDate: "",
+    description: "",
   })
 
 
@@ -93,7 +96,7 @@ export default function RecurringExpenses() {
           amount: parseFloat(newExpense.amount),
           category: newExpense.category.toLowerCase(),
           due_date: parseInt(newExpense.dueDate),
-          description: null,
+          description: newExpense.description || null,
           status: "active",
           auto_pay: false,
           reminder_enabled: true,
@@ -103,7 +106,7 @@ export default function RecurringExpenses() {
       if (response.ok) {
         const expense = await response.json()
         setExpenses(prev => [expense, ...prev])
-        setNewExpense({ name: "", amount: "", category: "", dueDate: "" })
+        setNewExpense({ name: "", amount: "", category: "", dueDate: "", description: "" })
       }
     } catch (error) {
       console.error('Error creating expense:', error)
@@ -137,6 +140,7 @@ export default function RecurringExpenses() {
       amount: expense.amount.toString(),
       category: expense.category,
       dueDate: expense.due_date.toString(),
+      description: expense.description || "",
     })
     setShowEditModal(true)
   }
@@ -144,7 +148,7 @@ export default function RecurringExpenses() {
   const closeEditModal = () => {
     setEditingExpense(null)
     setShowEditModal(false)
-    setEditForm({ name: "", amount: "", category: "", dueDate: "" })
+    setEditForm({ name: "", amount: "", category: "", dueDate: "", description: "" })
   }
 
   const updateExpense = async () => {
@@ -161,6 +165,7 @@ export default function RecurringExpenses() {
           amount: parseFloat(editForm.amount),
           category: editForm.category.toLowerCase(),
           due_date: parseInt(editForm.dueDate),
+          description: editForm.description || null,
         })
       })
       
@@ -254,12 +259,12 @@ export default function RecurringExpenses() {
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Income & Expenses</h1>
-            <p className="text-gray-600">Manage your income sources and recurring costs</p>
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">Budget</h1>
+            <p className="text-gray-600">Manage your income sources, recurring costs, and one-time transactions</p>
           </div>
 
           {/* Tab Toggle */}
-          <div className="flex bg-slate-100 rounded-xl p-1 mb-8 max-w-md">
+          <div className="flex bg-slate-100 rounded-xl p-1 mb-8 max-w-2xl">
             <button
               onClick={() => setActiveTab('income')}
               className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all ${
@@ -282,11 +287,27 @@ export default function RecurringExpenses() {
               <Receipt className="h-4 w-4" />
               <span>Recurring Expenses</span>
             </button>
+            <button
+              onClick={() => setActiveTab('one-time')}
+              className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all ${
+                activeTab === 'one-time'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Sparkles className="h-4 w-4" />
+              <span>One-Time</span>
+            </button>
           </div>
 
           {/* Income Sources Tab */}
           {activeTab === 'income' && (
             <IncomeSources />
+          )}
+
+          {/* One-Time Transactions Tab */}
+          {activeTab === 'one-time' && (
+            <OneTimeTransactions />
           )}
 
           {/* Expenses Tab */}
@@ -312,6 +333,17 @@ export default function RecurringExpenses() {
                       className="bg-white border-gray-200"
                     />
                   </div>
+
+                <div>
+                  <Label htmlFor="edit-expense-description">Description (Optional)</Label>
+                  <Input
+                    id="edit-expense-description"
+                    placeholder="e.g., Annual plan, split with roommate"
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    className="bg-white border-gray-200"
+                  />
+                </div>
 
                   <div>
                     <Label htmlFor="edit-expense-amount">Monthly Amount</Label>
@@ -538,6 +570,11 @@ export default function RecurringExpenses() {
                                     : "th"}
                             </span>
                           </div>
+                          {expense.description && (
+                            <div className="text-xs text-slate-500 mt-1">
+                              {expense.description}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -665,6 +702,17 @@ export default function RecurringExpenses() {
                       placeholder="e.g., Netflix, Rent"
                       value={newExpense.name}
                       onChange={(e) => setNewExpense({ ...newExpense, name: e.target.value })}
+                      className="bg-white border-gray-200"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="expense-description">Description (Optional)</Label>
+                    <Input
+                      id="expense-description"
+                      placeholder="e.g., Annual plan, shared subscription"
+                      value={newExpense.description}
+                      onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
                       className="bg-white border-gray-200"
                     />
                   </div>

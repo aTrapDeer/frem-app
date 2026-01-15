@@ -289,8 +289,8 @@ export default function BubbleMap({ isDemo = false, userData }: BubbleMapProps) 
             Start by adding your income, expenses, and goals to see your personalized financial journey map.
           </p>
           <div className="space-y-2">
-            <Button onClick={() => window.location.href = '/daily'} className="w-full">
-              Add Daily Transactions
+            <Button onClick={() => window.location.href = '/recurring'} className="w-full">
+              Add One-Time Transactions
             </Button>
             <Button onClick={() => window.location.href = '/goals'} variant="outline" className="w-full">
               Set Financial Goals

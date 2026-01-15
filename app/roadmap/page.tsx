@@ -218,12 +218,12 @@ export default function Roadmap() {
                     </Button>
                   </Link>
 
-                  <Link href="/daily">
+                  <Link href="/recurring">
                     <Button
                       variant="outline"
                       className="w-full justify-between border-indigo-200 text-indigo-600 hover:bg-indigo-50 bg-transparent"
                     >
-                      Update Daily Progress
+                      Add One-Time Transaction
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>

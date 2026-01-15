@@ -22,7 +22,9 @@ export type Goal = {
   target_amount: number
   current_amount: number
   category: 'emergency' | 'vacation' | 'car' | 'house' | 'debt' | 'investment' | 'other'
+  start_date: string | null
   deadline: string
+  interest_rate: number | null
   priority: 'low' | 'medium' | 'high'
   urgency_score: number // 1-5, higher = more urgent, affects surplus allocation
   status: 'active' | 'completed' | 'paused' | 'cancelled'
@@ -129,7 +131,9 @@ function rowToGoal(row: Record<string, unknown>): Goal {
     target_amount: row.target_amount as number,
     current_amount: row.current_amount as number,
     category: row.category as Goal['category'],
+    start_date: row.start_date as string | null,
     deadline: row.deadline as string,
+    interest_rate: row.interest_rate as number | null,
     priority: row.priority as Goal['priority'],
     urgency_score: (row.urgency_score as number) || 3, // Default to 3 (medium) if not set
     status: row.status as Goal['status'],
@@ -172,6 +176,33 @@ function rowToSideProject(row: Record<string, unknown>): SideProject {
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
   }
+}
+
+const getMonthlyGrowthRate = (annualRatePercent?: number | null) => {
+  if (!annualRatePercent || annualRatePercent <= 0) return 0
+  return Math.pow(1 + annualRatePercent / 100, 1 / 12) - 1
+}
+
+const calculateMonthlyRequired = (
+  targetAmount: number,
+  currentAmount: number,
+  monthsRemaining: number,
+  annualRatePercent?: number | null
+) => {
+  if (monthsRemaining <= 0) return 0
+  if (currentAmount >= targetAmount) return 0
+
+  const monthlyRate = getMonthlyGrowthRate(annualRatePercent)
+  const remaining = targetAmount - currentAmount
+
+  if (monthlyRate === 0) {
+    return remaining / monthsRemaining
+  }
+
+  const growthFactor = Math.pow(1 + monthlyRate, monthsRemaining)
+  const required = (targetAmount - currentAmount * growthFactor) * monthlyRate / (growthFactor - 1)
+
+  return Math.max(0, required)
 }
 
 function rowToMilestone(row: Record<string, unknown>): Milestone {
@@ -305,6 +336,27 @@ export const getTransactions = async (userId: string, date?: string): Promise<Tr
   return result.rows.map(row => rowToTransaction(row as Record<string, unknown>))
 }
 
+const getMonthRange = (date: Date = new Date()) => {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1)
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 1)
+
+  return {
+    start: start.toISOString().split('T')[0],
+    end: end.toISOString().split('T')[0]
+  }
+}
+
+export const getTransactionsForMonth = async (userId: string, monthStart?: string, monthEnd?: string): Promise<Transaction[]> => {
+  const range = monthStart && monthEnd ? { start: monthStart, end: monthEnd } : getMonthRange()
+
+  const result = await db.execute({
+    sql: 'SELECT * FROM daily_transactions WHERE user_id = ? AND transaction_date >= ? AND transaction_date < ? ORDER BY transaction_date DESC, transaction_time DESC',
+    args: [userId, range.start, range.end]
+  })
+
+  return result.rows.map(row => rowToTransaction(row as Record<string, unknown>))
+}
+
 export const updateTransaction = async (id: string, updates: Partial<Transaction>): Promise<Transaction> => {
   const now = getCurrentTimestamp()
   const fields: string[] = ['updated_at = ?']
@@ -358,8 +410,8 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
   const now = getCurrentTimestamp()
   
   await db.execute({
-    sql: `INSERT INTO financial_goals (id, user_id, title, description, target_amount, current_amount, category, deadline, priority, urgency_score, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO financial_goals (id, user_id, title, description, target_amount, current_amount, category, start_date, deadline, interest_rate, priority, urgency_score, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       goal.user_id,
@@ -368,7 +420,9 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
       goal.target_amount,
       goal.current_amount ?? 0,
       goal.category,
+      goal.start_date ?? null,
       goal.deadline,
+      goal.interest_rate ?? null,
       goal.priority ?? 'medium',
       goal.urgency_score ?? 3, // Default to 3 (medium urgency)
       goal.status ?? 'active',
@@ -385,11 +439,18 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
   return rowToGoal(result.rows[0] as Record<string, unknown>)
 }
 
-export const getGoals = async (userId: string): Promise<Goal[]> => {
-  const result = await db.execute({
-    sql: 'SELECT * FROM financial_goals WHERE user_id = ? ORDER BY created_at DESC',
-    args: [userId]
-  })
+export const getGoals = async (userId: string, includeCancelled: boolean = false): Promise<Goal[]> => {
+  let sql = 'SELECT * FROM financial_goals WHERE user_id = ?'
+  const args: (string | number)[] = [userId]
+  
+  if (!includeCancelled) {
+    sql += ' AND status != ?'
+    args.push('cancelled')
+  }
+  
+  sql += ' ORDER BY created_at DESC'
+  
+  const result = await db.execute({ sql, args })
   
   return result.rows.map(row => rowToGoal(row as Record<string, unknown>))
 }
@@ -419,9 +480,17 @@ export const updateGoal = async (id: string, updates: Partial<Goal>): Promise<Go
     fields.push('category = ?')
     args.push(updates.category)
   }
+  if (updates.start_date !== undefined) {
+    fields.push('start_date = ?')
+    args.push(updates.start_date)
+  }
   if (updates.deadline !== undefined) {
     fields.push('deadline = ?')
     args.push(updates.deadline)
+  }
+  if (updates.interest_rate !== undefined) {
+    fields.push('interest_rate = ?')
+    args.push(updates.interest_rate)
   }
   if (updates.priority !== undefined) {
     fields.push('priority = ?')
@@ -550,21 +619,30 @@ export const getGoalBreakdown = async (goalId: string, userId: string) => {
   // Calculate monthly required
   const today = new Date()
   const deadline = new Date(goalData.deadline)
-  const monthsRemaining = Math.max(1, Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
+  const startDate = goalData.start_date ? new Date(goalData.start_date) : today
+  const effectiveStart = startDate > today ? startDate : today
+  const monthsRemaining = Math.max(1, Math.round((deadline.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
   const remaining = goalData.target_amount - goalData.current_amount
-  const monthlyRequired = remaining / monthsRemaining
+  const monthlyRequired = calculateMonthlyRequired(
+    goalData.target_amount,
+    goalData.current_amount,
+    monthsRemaining,
+    goalData.category === 'investment' ? goalData.interest_rate : null
+  )
   
   // Generate expected payment schedule (next 6 months or until deadline)
   const paymentSchedule = []
   const monthsToShow = Math.min(6, monthsRemaining)
   let runningTotal = goalData.current_amount
+  const scheduleStart = effectiveStart > today ? effectiveStart : today
   
   for (let i = 0; i < monthsToShow; i++) {
-    const date = new Date(today)
+    const date = new Date(scheduleStart)
     date.setMonth(date.getMonth() + i + 1)
     date.setDate(1) // First of each month
     
-    runningTotal += monthlyRequired
+    const monthlyRate = goalData.category === 'investment' ? getMonthlyGrowthRate(goalData.interest_rate) : 0
+    runningTotal = runningTotal * (1 + monthlyRate) + monthlyRequired
     paymentSchedule.push({
       date: date.toISOString().split('T')[0],
       month: date.toLocaleString('default', { month: 'short', year: 'numeric' }),
@@ -1119,6 +1197,7 @@ export interface ProjectionSummary {
   monthlySurplus: number
   surplusAllocatedToGoals: number
   hasVariableIncome: boolean
+  oneTimeNet?: number
   // Scenarios for variable income
   scenarios?: {
     conservative: GoalProjection[]
@@ -1130,17 +1209,23 @@ export interface ProjectionSummary {
 export const calculateGoalProjections = async (userId: string): Promise<ProjectionSummary> => {
   try {
     // Get all required data
-    const [goals, recurringExpenses, incomeSources, sideProjects] = await Promise.all([
+    const [goals, recurringExpenses, incomeSources, sideProjects, monthlyTransactions] = await Promise.all([
       getGoals(userId),
       getRecurringExpenses(userId),
       getIncomeSources(userId).catch(() => []),
-      getSideProjects(userId)
+      getSideProjects(userId),
+      getTransactionsForMonth(userId)
     ])
     
     const activeGoals = goals.filter(g => g.status === 'active')
     const activeSources = incomeSources.filter(s => s.status === 'active')
     const activeSideProjects = sideProjects.filter(p => p.status === 'active')
     
+    // Calculate one-time net for the current month
+    const oneTimeNet = monthlyTransactions.reduce((sum, transaction) => {
+      return sum + (transaction.type === 'income' ? transaction.amount : -transaction.amount)
+    }, 0)
+
     // Calculate monthly income
     const hasVariableIncome = activeSources.some(s => s.is_commission_based)
     
@@ -1153,6 +1238,11 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     monthlyIncomeLow += sideProjectIncome
     monthlyIncomeMid += sideProjectIncome
     monthlyIncomeHigh += sideProjectIncome
+
+    // Apply one-time net impact for the current month
+    monthlyIncomeLow += oneTimeNet
+    monthlyIncomeMid += oneTimeNet
+    monthlyIncomeHigh += oneTimeNet
     
     // Calculate monthly expenses
     const monthlyExpenses = recurringExpenses.reduce((sum, e) => sum + e.amount, 0)
@@ -1162,63 +1252,145 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     const surplusMid = Math.max(0, monthlyIncomeMid - monthlyExpenses)
     const surplusHigh = Math.max(0, monthlyIncomeHigh - monthlyExpenses)
     
-    // Calculate weighted total for urgency-based allocation
-    // Higher urgency score (1-5) = more allocation
-    const calculateWeightedRemaining = (goals: Goal[]) => {
-      return goals.reduce((sum, g) => {
-        const remaining = Math.max(0, g.target_amount - g.current_amount)
-        const urgencyWeight = g.urgency_score || 3 // Default to 3 if not set
-        return sum + (remaining * urgencyWeight)
-      }, 0)
+    const getMonthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1)
+    const addMonths = (date: Date, months: number) => new Date(date.getFullYear(), date.getMonth() + months, 1)
+    const diffMonths = (start: Date, end: Date) => {
+      return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
     }
-    
-    const totalWeightedRemaining = calculateWeightedRemaining(activeGoals)
-    
-    // Helper function to calculate projections for a given surplus
+
+    const estimateMonthsToComplete = (
+      balance: number,
+      target: number,
+      monthlyAllocation: number,
+      annualRatePercent?: number | null
+    ) => {
+      if (balance >= target) return 0
+      const monthlyRate = getMonthlyGrowthRate(annualRatePercent)
+      if (monthlyRate === 0) {
+        if (monthlyAllocation <= 0) return Infinity
+        return (target - balance) / monthlyAllocation
+      }
+
+      const paymentFactor = monthlyAllocation / monthlyRate
+      const numerator = target - paymentFactor
+      const denominator = balance - paymentFactor
+
+      if (denominator <= 0 || numerator <= 0) return Infinity
+      return Math.log(numerator / denominator) / Math.log(1 + monthlyRate)
+    }
+
     const calculateProjectionsForSurplus = (monthlySurplus: number): GoalProjection[] => {
       const today = new Date()
-      
-      // Sort by urgency_score (highest first) for display order
-      const sortedGoals = [...activeGoals].sort((a, b) => (b.urgency_score || 3) - (a.urgency_score || 3))
-      
-      return sortedGoals.map(goal => {
-        const remaining = Math.max(0, goal.target_amount - goal.current_amount)
+      const startOfMonth = getMonthStart(today)
+      const maxDeadline = activeGoals.reduce((max, goal) => {
         const deadline = new Date(goal.deadline)
-        const daysUntilDeadline = Math.max(1, Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)))
-        const monthsUntilDeadline = daysUntilDeadline / 30.44
-        
-        // Allocate surplus based on urgency-weighted remaining amount
-        // Higher urgency goals get proportionally more of the surplus
-        const urgencyWeight = goal.urgency_score || 3
-        const weightedRemaining = remaining * urgencyWeight
-        const allocationRatio = totalWeightedRemaining > 0 ? weightedRemaining / totalWeightedRemaining : 0
-        const monthlyAllocation = monthlySurplus * allocationRatio
-        
-        // Calculate projected progress
-        // How many months to complete at this rate?
-        const monthsToComplete = monthlyAllocation > 0 ? remaining / monthlyAllocation : Infinity
-        const daysToComplete = monthsToComplete * 30.44
-        
-        // Projected completion date
-        const projectedCompletionDate = new Date(today)
-        projectedCompletionDate.setDate(projectedCompletionDate.getDate() + Math.ceil(daysToComplete))
-        
-        // Calculate projected amount (how much will be saved by deadline)
-        const projectedContributionsByDeadline = monthlyAllocation * monthsUntilDeadline
-        const projectedAmount = Math.min(remaining, projectedContributionsByDeadline)
-        const totalProjectedProgress = goal.current_amount + projectedAmount
-        
-        const progressPercentage = goal.target_amount > 0 
-          ? (totalProjectedProgress / goal.target_amount) * 100 
+        return deadline > max ? deadline : max
+      }, startOfMonth)
+      const monthsToMaxDeadline = Math.max(1, diffMonths(startOfMonth, maxDeadline) + 1)
+      const simulationMonths = Math.min(monthsToMaxDeadline + 120, 240)
+
+      const goalStates = activeGoals.map(goal => ({
+        goal,
+        balance: goal.current_amount,
+        startDate: goal.start_date ? getMonthStart(new Date(goal.start_date)) : startOfMonth,
+        deadline: getMonthStart(new Date(goal.deadline)),
+        totalAllocated: 0,
+        allocationMonths: 0,
+        completionDate: null as Date | null,
+        balanceAtDeadline: null as number | null
+      }))
+
+      for (let monthIndex = 0; monthIndex < simulationMonths; monthIndex += 1) {
+        const monthDate = addMonths(startOfMonth, monthIndex)
+        const activeThisMonth = goalStates.filter(state => {
+          return !state.completionDate && monthDate >= state.startDate
+        })
+
+        // Calculate weighted monthly requirements for allocation
+        // Goals due sooner with higher urgency get proportionally more
+        const goalsWithWeights = activeThisMonth.map(state => {
+          const remaining = Math.max(0, state.goal.target_amount - state.balance)
+          const monthsUntilDeadline = Math.max(1, diffMonths(monthDate, state.deadline))
+          const urgencyWeight = state.goal.urgency_score || 3
+          
+          // Calculate monthly requirement to meet deadline
+          const monthlyRequirement = remaining / monthsUntilDeadline
+          
+          // Time pressure factor: goals due sooner get exponentially more weight
+          // 1 month = 12x multiplier, 12 months = 1x, 24 months = 0.5x, etc.
+          const timePressure = Math.max(0.1, 12 / monthsUntilDeadline)
+          
+          // Combined weight: monthly requirement * urgency * time pressure
+          // This ensures urgent near-term goals get priority over large long-term ones
+          const weight = monthlyRequirement * urgencyWeight * timePressure
+          
+          return { state, remaining, monthlyRequirement, urgencyWeight, timePressure, weight }
+        })
+
+        const totalWeight = goalsWithWeights.reduce((sum, g) => sum + g.weight, 0)
+
+        goalsWithWeights.forEach(({ state, weight }) => {
+          const allocationRatio = totalWeight > 0 ? weight / totalWeight : 0
+          const allocation = monthlySurplus > 0 ? monthlySurplus * allocationRatio : 0
+
+          if (allocation > 0) {
+            state.totalAllocated += allocation
+            state.allocationMonths += 1
+          }
+
+          const monthlyRate = state.goal.category === 'investment'
+            ? getMonthlyGrowthRate(state.goal.interest_rate)
+            : 0
+
+          state.balance = state.balance * (1 + monthlyRate) + allocation
+
+          if (!state.balanceAtDeadline && monthDate >= state.deadline) {
+            state.balanceAtDeadline = state.balance
+          }
+
+          if (!state.completionDate && state.balance >= state.goal.target_amount) {
+            state.completionDate = new Date(monthDate)
+          }
+        })
+      }
+
+      const sortedGoals = [...goalStates].sort((a, b) => (b.goal.urgency_score || 3) - (a.goal.urgency_score || 3))
+
+      return sortedGoals.map(state => {
+        const monthlyAllocation = state.allocationMonths > 0
+          ? state.totalAllocated / state.allocationMonths
           : 0
-        
-        const isOnTrack = projectedCompletionDate <= deadline
-        const daysAheadOrBehind = Math.round((deadline.getTime() - projectedCompletionDate.getTime()) / (1000 * 60 * 60 * 24))
-        
-        // Determine status
+
+        const effectiveStart = state.startDate > startOfMonth ? state.startDate : startOfMonth
+        const completionMonths = estimateMonthsToComplete(
+          state.goal.current_amount,
+          state.goal.target_amount,
+          monthlyAllocation,
+          state.goal.category === 'investment' ? state.goal.interest_rate : null
+        )
+
+        const projectedCompletionDate = state.completionDate
+          ? state.completionDate
+          : (completionMonths !== Infinity
+              ? addMonths(effectiveStart, Math.ceil(completionMonths))
+              : state.deadline)
+
+        const projectedAmount = Math.min(
+          state.balanceAtDeadline ?? state.balance,
+          state.goal.target_amount
+        )
+        const progressPercentage = state.goal.target_amount > 0
+          ? (projectedAmount / state.goal.target_amount) * 100
+          : 0
+
+        const isOnTrack = Boolean(state.completionDate && state.completionDate <= state.deadline)
+        const daysAheadOrBehind = Math.round((state.deadline.getTime() - projectedCompletionDate.getTime()) / (1000 * 60 * 60 * 24))
+
         let status: GoalProjection['status']
         if (progressPercentage >= 100) {
           status = 'completed'
+        } else if (!state.completionDate && projectedCompletionDate > state.deadline) {
+          status = 'at_risk'
         } else if (daysAheadOrBehind > 30) {
           status = 'ahead'
         } else if (daysAheadOrBehind >= 0) {
@@ -1228,24 +1400,24 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
         } else {
           status = 'at_risk'
         }
-        
+
         return {
-          goalId: goal.id,
-          title: goal.title,
-          targetAmount: goal.target_amount,
-          currentAmount: goal.current_amount,
+          goalId: state.goal.id,
+          title: state.goal.title,
+          targetAmount: state.goal.target_amount,
+          currentAmount: state.goal.current_amount,
           projectedAmount: Math.round(projectedAmount * 100) / 100,
-          totalProjectedProgress: Math.round(totalProjectedProgress * 100) / 100,
+          totalProjectedProgress: Math.round(projectedAmount * 100) / 100,
           progressPercentage: Math.round(progressPercentage * 100) / 100,
           monthlyAllocation: Math.round(monthlyAllocation * 100) / 100,
-          urgencyScore: goal.urgency_score || 3,
-          originalDeadline: goal.deadline,
+          urgencyScore: state.goal.urgency_score || 3,
+          originalDeadline: state.goal.deadline,
           projectedCompletionDate: projectedCompletionDate.toISOString().split('T')[0],
-          daysUntilProjectedCompletion: Math.round(daysToComplete),
+          daysUntilProjectedCompletion: diffMonths(startOfMonth, projectedCompletionDate) * 30,
           isOnTrack,
           daysAheadOrBehind,
           status,
-          category: goal.category
+          category: state.goal.category
         }
       })
     }
@@ -1259,7 +1431,8 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
       totalMonthlyExpenses: Math.round(monthlyExpenses * 100) / 100,
       monthlySurplus: Math.round(surplusMid * 100) / 100,
       surplusAllocatedToGoals: Math.round(surplusMid * 100) / 100,
-      hasVariableIncome
+      hasVariableIncome,
+      oneTimeNet: Math.round(oneTimeNet * 100) / 100
     }
     
     // Add scenarios if variable income
@@ -1788,12 +1961,35 @@ export const generateFinancialContextHash = (data: {
   oneTimeIncomes?: OneTimeIncome[]
 }): string => {
   const contextData = {
-    goals: data.goals.map(g => ({ id: g.id, amount: g.target_amount, current: g.current_amount, deadline: g.deadline })),
-    expenses: data.recurringExpenses.map(e => ({ id: e.id, amount: e.amount })),
-    income: data.incomeSources.map(i => ({ id: i.id, low: i.estimated_monthly_low, mid: i.estimated_monthly_mid, high: i.estimated_monthly_high })),
+    goals: data.goals.map(g => ({
+      id: g.id,
+      amount: g.target_amount,
+      current: g.current_amount,
+      start: g.start_date,
+      deadline: g.deadline
+    })),
+    expenses: data.recurringExpenses.map(e => ({
+      id: e.id,
+      amount: e.amount,
+      description: e.description
+    })),
+    income: data.incomeSources.map(i => ({
+      id: i.id,
+      low: i.estimated_monthly_low,
+      mid: i.estimated_monthly_mid,
+      high: i.estimated_monthly_high,
+      description: i.description
+    })),
     projects: data.sideProjects.map(p => ({ id: p.id, earnings: p.current_monthly_earnings })),
     accounts: data.financialAccounts?.map(a => ({ id: a.id, type: a.account_type, balance: a.balance })) || [],
-    oneTime: data.oneTimeIncomes?.map(o => ({ id: o.id, amount: o.amount, applied: o.applied_to_goals })) || []
+    oneTime: data.oneTimeIncomes?.map(o => ({ id: o.id, amount: o.amount, applied: o.applied_to_goals })) || [],
+    oneTimeTransactions: (data as { oneTimeTransactions?: Transaction[] }).oneTimeTransactions?.map(t => ({
+      id: t.id,
+      type: t.type,
+      amount: t.amount,
+      description: t.description,
+      date: t.transaction_date
+    })) || []
   }
   // Simple hash based on JSON string
   const jsonStr = JSON.stringify(contextData)
@@ -1808,13 +2004,14 @@ export const generateFinancialContextHash = (data: {
 
 // Build context for AI prompt
 export const buildAIContext = async (userId: string) => {
-  const [goals, recurringExpenses, incomeSources, sideProjects, financialAccounts, oneTimeIncomes] = await Promise.all([
+  const [goals, recurringExpenses, incomeSources, sideProjects, financialAccounts, oneTimeIncomes, oneTimeTransactions] = await Promise.all([
     getGoals(userId),
     getRecurringExpenses(userId),
     getIncomeSources(userId).catch(() => []),
     getSideProjects(userId),
     getFinancialAccounts(userId).catch(() => []),
-    getOneTimeIncomes(userId).catch(() => [])
+    getOneTimeIncomes(userId).catch(() => []),
+    getTransactionsForMonth(userId)
   ])
   
   const activeGoals = goals.filter(g => g.status === 'active')
@@ -1837,9 +2034,16 @@ export const buildAIContext = async (userId: string) => {
   const today = new Date()
   const goalsWithTimeline = activeGoals.map(goal => {
     const deadline = new Date(goal.deadline)
-    const monthsLeft = Math.max(1, Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
+    const startDate = goal.start_date ? new Date(goal.start_date) : today
+    const effectiveStart = startDate > today ? startDate : today
+    const monthsLeft = Math.max(1, Math.round((deadline.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
     const remainingAmount = goal.target_amount - goal.current_amount
-    const monthlyRequired = remainingAmount / monthsLeft
+    const monthlyRequired = calculateMonthlyRequired(
+      goal.target_amount,
+      goal.current_amount,
+      monthsLeft,
+      goal.category === 'investment' ? goal.interest_rate : null
+    )
     
     return {
       title: goal.title,
@@ -1847,6 +2051,8 @@ export const buildAIContext = async (userId: string) => {
       targetAmount: goal.target_amount,
       currentAmount: goal.current_amount,
       remainingAmount,
+      startDate: goal.start_date,
+      interestRate: goal.interest_rate,
       deadline: goal.deadline,
       monthsRemaining: monthsLeft,
       monthlyRequired: Math.round(monthlyRequired * 100) / 100,
@@ -1876,6 +2082,10 @@ export const buildAIContext = async (userId: string) => {
   const appliedOneTimeIncome = oneTimeIncomes
     .filter(i => i.applied_to_goals)
     .reduce((sum, i) => sum + i.amount, 0)
+
+  const oneTimeTransactionNet = oneTimeTransactions.reduce((sum, t) => {
+    return sum + (t.type === 'income' ? t.amount : -t.amount)
+  }, 0)
   
   // Calculate financial metrics
   const totalMonthlyIncome = totalMonthlyMid + sideProjectIncome
@@ -1893,6 +2103,7 @@ export const buildAIContext = async (userId: string) => {
         name: s.name,
         type: s.income_type,
         isCommissionBased: s.is_commission_based,
+        description: s.description,
         monthlyEstimate: {
           low: s.estimated_monthly_low,
           mid: s.estimated_monthly_mid,
@@ -1904,12 +2115,19 @@ export const buildAIContext = async (userId: string) => {
     expenses: recurringExpenses.map(e => ({
       name: e.name,
       amount: e.amount,
-      category: e.category
+      category: e.category,
+      description: e.description
     })),
     sideProjects: activeSideProjects.map(p => ({
       name: p.name,
       monthlyEarnings: p.current_monthly_earnings,
       status: p.status
+    })),
+    oneTimeTransactions: oneTimeTransactions.map(t => ({
+      type: t.type,
+      amount: t.amount,
+      description: t.description,
+      date: t.transaction_date
     })),
     accounts: {
       checking: {
@@ -1958,6 +2176,7 @@ export const buildAIContext = async (userId: string) => {
       savingsBalance,
       totalAccountBalance,
       unappliedOneTimeIncome,
+      oneTimeTransactionNet,
       // Financial cushion: savings + unapplied one-time income
       financialCushion: savingsBalance + unappliedOneTimeIncome
     },
@@ -1968,7 +2187,8 @@ export const buildAIContext = async (userId: string) => {
       incomeSources,
       sideProjects,
       financialAccounts,
-      oneTimeIncomes
+      oneTimeIncomes,
+      oneTimeTransactions
     }
   }
 }

@@ -30,7 +30,7 @@ You have access to their complete financial profile including:
 Help them understand their finances and make progress toward their goals!`
 
 function buildContextSummary(context: Awaited<ReturnType<typeof buildAIContext>>): string {
-  const { incomeSources, goals, expenses, sideProjects, accounts, oneTimeIncome, metrics } = context
+  const { incomeSources, goals, expenses, sideProjects, accounts, oneTimeIncome, oneTimeTransactions, metrics } = context
   
   let summary = `USER'S FINANCIAL CONTEXT:\n\n`
   
@@ -43,7 +43,8 @@ function buildContextSummary(context: Awaited<ReturnType<typeof buildAIContext>>
   
   if (incomeSources.sources.length > 0) {
     incomeSources.sources.forEach(source => {
-      summary += `- ${source.name}: $${source.monthlyEstimate.mid.toLocaleString()}/mo\n`
+      const description = source.description ? ` (${source.description})` : ''
+      summary += `- ${source.name}: $${source.monthlyEstimate.mid.toLocaleString()}/mo${description}\n`
     })
   }
   
@@ -58,7 +59,8 @@ function buildContextSummary(context: Awaited<ReturnType<typeof buildAIContext>>
   summary += `\nEXPENSES: $${metrics.totalMonthlyExpenses.toLocaleString()}/month\n`
   if (expenses.length > 0) {
     expenses.slice(0, 5).forEach(e => {
-      summary += `- ${e.name}: $${e.amount.toLocaleString()}\n`
+      const description = e.description ? ` (${e.description})` : ''
+      summary += `- ${e.name}: $${e.amount.toLocaleString()}${description}\n`
     })
     if (expenses.length > 5) {
       summary += `- ...and ${expenses.length - 5} more\n`
@@ -69,7 +71,9 @@ function buildContextSummary(context: Awaited<ReturnType<typeof buildAIContext>>
   summary += `\nGOALS (${goals.length} active):\n`
   if (goals.length > 0) {
     goals.forEach(g => {
-      summary += `- ${g.title}: $${g.currentAmount.toLocaleString()}/$${g.targetAmount.toLocaleString()} (${g.progressPercentage}%) - ${g.monthsRemaining} months to deadline\n`
+      const startInfo = g.startDate ? ` (starts ${g.startDate})` : ''
+      const growthInfo = g.interestRate ? ` (${g.interestRate}% growth)` : ''
+      summary += `- ${g.title}: $${g.currentAmount.toLocaleString()}/$${g.targetAmount.toLocaleString()} (${g.progressPercentage}%) - ${g.monthsRemaining} months to deadline${startInfo}${growthInfo}\n`
     })
   }
   
@@ -84,10 +88,17 @@ function buildContextSummary(context: Awaited<ReturnType<typeof buildAIContext>>
   if (oneTimeIncome.unappliedTotal > 0) {
     summary += `\nUNAPPLIED ONE-TIME INCOME: $${oneTimeIncome.unappliedTotal.toLocaleString()}\n`
   }
+
+  if (oneTimeTransactions.length > 0) {
+    summary += `\nONE-TIME TRANSACTIONS (CURRENT MONTH): ${oneTimeTransactions.length}\n`
+    const net = oneTimeTransactions.reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0)
+    summary += `- Net impact: ${net >= 0 ? '+' : ''}$${net.toLocaleString()}\n`
+  }
   
   // Summary metrics
   summary += `\nSUMMARY:\n`
   summary += `- Monthly surplus: ${metrics.monthlySurplus >= 0 ? '+' : ''}$${metrics.monthlySurplus.toLocaleString()}\n`
+  summary += `- One-time net this month: ${metrics.oneTimeTransactionNet >= 0 ? '+' : ''}$${metrics.oneTimeTransactionNet.toLocaleString()}\n`
   summary += `- Savings rate: ${metrics.savingsRate}%\n`
   if (metrics.financialCushion > 0) {
     const monthsCovered = metrics.totalMonthlyObligations > 0 

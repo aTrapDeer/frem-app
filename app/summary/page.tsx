@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { useInView } from "framer-motion"
-import { DollarSign, Target, MapPin, X, CreditCard, TrendingUp, TrendingDown, CheckCircle2, Clock, AlertTriangle } from "lucide-react"
+import { DollarSign, Target, MapPin, X, CreditCard, TrendingUp, TrendingDown, CheckCircle2, Clock, AlertTriangle, ChevronLeft, ChevronRight, Calendar, Play, Rocket } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
@@ -67,6 +67,42 @@ interface ProjectionSummary {
   }
 }
 
+interface MonthlyGoalProjection {
+  goalId: string
+  title: string
+  category: string
+  targetAmount: number
+  projectedBalance: number
+  monthlyAllocation: number
+  progressPercentage: number
+  status: 'active' | 'completed' | 'not_started' | 'at_risk'
+  deadline: string
+  startDate: string | null
+  isCompletedThisMonth: boolean
+  isStartingThisMonth: boolean
+}
+
+interface MonthlyProjection {
+  month: string
+  monthLabel: string
+  activeGoals: MonthlyGoalProjection[]
+  completedGoals: { goalId: string; title: string; completedInMonth: string }[]
+  upcomingGoals: { goalId: string; title: string; startsInMonth: string }[]
+  financials: {
+    totalMonthlyIncome: number
+    totalMonthlyExpenses: number
+    monthlySurplus: number
+    savingsRate: number
+    totalAllocatedToGoals: number
+  }
+  summary: {
+    activeGoalsCount: number
+    completedGoalsCount: number
+    upcomingGoalsCount: number
+    totalGoalProgress: number
+  }
+}
+
 interface Transaction {
   id: string
   type: string
@@ -122,6 +158,9 @@ export default function SummaryPage() {
     hasCommissionIncome: boolean 
   } | null>(null)
   const [projections, setProjections] = useState<ProjectionSummary | null>(null)
+  const [monthlyProjections, setMonthlyProjections] = useState<MonthlyProjection[]>([])
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(0)
+  const [monthlyLoading, setMonthlyLoading] = useState(false)
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
 
@@ -134,9 +173,11 @@ export default function SummaryPage() {
         setLoading(true)
         
         // Fetch all user financial data from summary API and projections
-        const [summaryRes, projectionsRes] = await Promise.all([
+        // Only fetch 12 months initially for faster load
+        const [summaryRes, projectionsRes, monthlyRes] = await Promise.all([
           fetch('/api/summary'),
-          fetch('/api/projections')
+          fetch('/api/projections'),
+          fetch('/api/projections/monthly?months=12')
         ])
         
         if (!summaryRes.ok) throw new Error('Failed to fetch summary data')
@@ -149,7 +190,8 @@ export default function SummaryPage() {
           sideProjects: sideProjectsData, 
           transactions: recentTransactionsData, 
           targetCalculation, 
-          incomeSummary: incomeSummaryData 
+          incomeSummary: incomeSummaryData,
+          oneTimeNet
         } = data
         
         setMilestones(milestonesData)
@@ -160,14 +202,21 @@ export default function SummaryPage() {
           const projectionsData = await projectionsRes.json()
           setProjections(projectionsData)
         }
+
+        if (monthlyRes.ok) {
+          const monthlyData = await monthlyRes.json()
+          if (monthlyData.monthlyProjections && Array.isArray(monthlyData.monthlyProjections)) {
+            setMonthlyProjections(monthlyData.monthlyProjections)
+          }
+        } else {
+          console.error('Monthly projections fetch failed:', monthlyRes.status)
+        }
         
-        // Calculate estimated monthly income from recent transactions
-        const recentIncome = (recentTransactionsData as Transaction[])
-          .filter((t: Transaction) => t.type === 'income')
-          .reduce((sum: number, t: Transaction) => sum + t.amount, 0)
-        
-        // Estimate monthly income (rough calculation)
-        const estimatedMonthlyIncome = recentIncome * 30 / Math.max(7, recentTransactionsData.length) || (userSettings?.daily_budget_target ? userSettings.daily_budget_target * 30 : 0)
+        // Base monthly income from sources or daily target estimate
+        const baseMonthlyIncome = incomeSummaryData?.totalMonthlyMid || targetCalculation?.estimatedMonthlyIncome || (userSettings?.daily_budget_target ? userSettings.daily_budget_target * 30 : 0)
+
+        // Apply one-time net for the current month
+        const estimatedMonthlyIncome = baseMonthlyIncome + (oneTimeNet || 0)
         
         // Prepare financial data for journey map
         const userData: UserFinancialData = {
@@ -200,20 +249,24 @@ export default function SummaryPage() {
     }
   }, [user, userSettings])
 
-  // Calculate dynamic KPIs from actual user data
-  const monthlyIncome = targetData?.estimatedMonthlyIncome || incomeSummary?.totalMonthlyMid || 0
-  const monthlyExpenses = targetData?.monthlyRecurringTotal || 0
-  const monthlySurplus = targetData?.monthlySurplusDeficit || (monthlyIncome - monthlyExpenses)
+  // Get selected month data or fall back to current data
+  const selectedMonth = monthlyProjections[selectedMonthIndex]
+  
+  // Calculate dynamic KPIs from selected month or actual user data
+  const monthlyIncome = selectedMonth?.financials.totalMonthlyIncome || targetData?.estimatedMonthlyIncome || incomeSummary?.totalMonthlyMid || 0
+  const monthlyExpenses = selectedMonth?.financials.totalMonthlyExpenses || targetData?.monthlyRecurringTotal || 0
+  const monthlySurplus = selectedMonth?.financials.monthlySurplus || targetData?.monthlySurplusDeficit || (monthlyIncome - monthlyExpenses)
   
   // Calculate savings rate (percentage of income saved/available after expenses)
-  const savingsRate = monthlyIncome > 0 ? Math.round((monthlySurplus / monthlyIncome) * 100) : 0
+  const savingsRate = selectedMonth?.financials.savingsRate || (monthlyIncome > 0 ? Math.round((monthlySurplus / monthlyIncome) * 100) : 0)
   
-  // Calculate average goal progress from projections or goals data
-  const goalProgress = projections?.goals && projections.goals.length > 0
-    ? Math.round(projections.goals.reduce((sum, g) => sum + g.progressPercentage, 0) / projections.goals.length)
-    : financialData?.goals && financialData.goals.length > 0
-      ? Math.round(financialData.goals.reduce((sum, g) => sum + (g.current_amount / g.target_amount * 100), 0) / financialData.goals.length)
-      : 0
+  // Calculate average goal progress from selected month or projections
+  const goalProgress = selectedMonth?.summary.totalGoalProgress 
+    || (projections?.goals && projections.goals.length > 0
+      ? Math.round(projections.goals.reduce((sum, g) => sum + g.progressPercentage, 0) / projections.goals.length)
+      : financialData?.goals && financialData.goals.length > 0
+        ? Math.round(financialData.goals.reduce((sum, g) => sum + (g.current_amount / g.target_amount * 100), 0) / financialData.goals.length)
+        : 0)
   
   // Calculate months until goals complete (average)
   const avgMonthsToGoals = projections?.goals && projections.goals.length > 0
@@ -221,18 +274,18 @@ export default function SummaryPage() {
     : 0
 
   const kpis = {
-    // Dynamic metrics based on income, expenses, goals
+    // Dynamic metrics based on selected month
     savingsRate,
     goalProgress,
     monthlySurplus,
     avgMonthsToGoals,
     // Financial health metrics from target calculation
-    monthlyObligations: targetData?.totalMonthlyObligations || 0,
+    monthlyObligations: selectedMonth?.financials.totalAllocatedToGoals || targetData?.totalMonthlyObligations || 0,
     monthlyIncome,
     dailyTarget: targetData?.dailyTarget || 0,
-    financialHealth: targetData ? (targetData.monthlySurplusDeficit >= 0 ? 'positive' : 'negative') : 'unknown',
+    financialHealth: monthlySurplus >= 0 ? 'positive' : 'negative',
     surplus: monthlySurplus,
-    activeGoals: targetData?.activeGoalsCount || 0,
+    activeGoals: selectedMonth?.summary.activeGoalsCount || targetData?.activeGoalsCount || 0,
     recurringExpenses: targetData?.recurringExpensesCount || 0,
   }
 
@@ -282,16 +335,139 @@ export default function SummaryPage() {
             <p className="text-slate-600">Your complete financial journey at a glance</p>
           </motion.div>
 
-          {/* KPI Strip - Dynamic metrics based on income, expenses, goals */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Month Navigation */}
+          {monthlyProjections.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
+              transition={{ duration: 0.6, delay: 0.05 }}
+            >
+              <Card className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100">
+                <CardContent className="p-3 sm:p-4">
+                  {/* Mobile Layout */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm text-slate-600">Viewing projections for</p>
+                        <p className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                          {monthlyProjections[selectedMonthIndex]?.monthLabel || 'Current Month'}
+                          {selectedMonthIndex === 0 && (
+                            <span className="ml-2 text-xs font-normal bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                              Current
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Navigation Controls */}
+                    <div className="flex items-center justify-between sm:justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedMonthIndex(prev => Math.max(0, prev - 1))}
+                        disabled={selectedMonthIndex === 0}
+                        className="h-9 w-9 p-0 flex-shrink-0"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      
+                      {/* Month indicator - hidden on mobile, shown on sm+ */}
+                      <div className="hidden sm:flex items-center gap-1 px-2">
+                        {monthlyProjections.slice(0, Math.min(6, monthlyProjections.length)).map((_, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSelectedMonthIndex(idx)}
+                            className={`w-2 h-2 rounded-full transition-all ${
+                              idx === selectedMonthIndex 
+                                ? 'bg-indigo-600 w-3' 
+                                : 'bg-slate-300 hover:bg-slate-400'
+                            }`}
+                          />
+                        ))}
+                        {monthlyProjections.length > 6 && (
+                          <span className="text-xs text-slate-500 ml-1">...</span>
+                        )}
+                      </div>
+                      
+                      {/* Month counter for mobile */}
+                      <span className="sm:hidden text-sm font-medium text-slate-600 min-w-[50px] text-center">
+                        {selectedMonthIndex + 1}/{monthlyProjections.length}
+                      </span>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedMonthIndex(prev => Math.min(monthlyProjections.length - 1, prev + 1))}
+                        disabled={selectedMonthIndex >= monthlyProjections.length - 1}
+                        className="h-9 w-9 p-0 flex-shrink-0"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      
+                      {selectedMonthIndex !== 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedMonthIndex(0)}
+                          className="text-indigo-600 text-xs sm:text-sm px-2 sm:px-3"
+                        >
+                          Reset
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Month quick stats - responsive grid */}
+                  {monthlyProjections[selectedMonthIndex] && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-indigo-100">
+                      <div className="text-center">
+                        <p className="text-xl sm:text-2xl font-bold text-indigo-600">
+                          {monthlyProjections[selectedMonthIndex].summary.activeGoalsCount}
+                        </p>
+                        <p className="text-xs text-slate-600">Active</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xl sm:text-2xl font-bold text-green-600">
+                          {monthlyProjections[selectedMonthIndex].summary.completedGoalsCount}
+                        </p>
+                        <p className="text-xs text-slate-600">Done</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xl sm:text-2xl font-bold text-amber-600">
+                          {monthlyProjections[selectedMonthIndex].summary.upcomingGoalsCount}
+                        </p>
+                        <p className="text-xs text-slate-600">Upcoming</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xl sm:text-2xl font-bold text-slate-900">
+                          {Math.round(monthlyProjections[selectedMonthIndex].summary.totalGoalProgress)}%
+                        </p>
+                        <p className="text-xs text-slate-600">Progress</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* KPI Strip - Dynamic metrics based on selected month */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <motion.div
+              key={`savings-${selectedMonthIndex}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
             >
               <Card className="glass-card card-lift">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-600">Savings Rate</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-600">
+                    Savings Rate {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
+                  </CardTitle>
                   <TrendingUp className="h-4 w-4 text-slate-600" />
                 </CardHeader>
                 <CardContent>
@@ -306,43 +482,51 @@ export default function SummaryPage() {
             </motion.div>
 
             <motion.div
+              key={`progress-${selectedMonthIndex}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
             >
               <Card className="glass-card card-lift">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-600">Goal Progress</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-600">
+                    Goal Progress {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
+                  </CardTitle>
                   <Target className="h-4 w-4 text-slate-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold font-numbers text-slate-900">{kpis.goalProgress}%</div>
+                  <div className="text-2xl font-bold font-numbers text-slate-900">{Math.round(kpis.goalProgress)}%</div>
                   <div className="mt-2">
                     <Progress value={kpis.goalProgress} className="h-2" />
                   </div>
                   <p className="text-xs text-slate-600 mt-1">
-                    avg across {kpis.activeGoals || projections?.goals?.length || 0} goals
+                    avg across {kpis.activeGoals || projections?.goals?.length || 0} {selectedMonth && selectedMonthIndex > 0 ? 'active' : ''} goals
                   </p>
                 </CardContent>
               </Card>
             </motion.div>
 
             <motion.div
+              key={`surplus-${selectedMonthIndex}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
             >
               <Card className="glass-card card-lift">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-600">Monthly Surplus</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-600">
+                    Monthly Surplus {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
+                  </CardTitle>
                   <DollarSign className={`h-4 w-4 ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`} />
                 </CardHeader>
                 <CardContent>
                   <div className={`text-2xl font-bold font-numbers ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {kpis.monthlySurplus >= 0 ? '+' : ''}${Math.abs(kpis.monthlySurplus).toLocaleString()}
+                    {kpis.monthlySurplus >= 0 ? '+' : ''}${Math.abs(Math.round(kpis.monthlySurplus)).toLocaleString()}
                   </div>
                   <p className="text-xs text-slate-600 mt-1">
-                    {kpis.avgMonthsToGoals > 0 ? `~${kpis.avgMonthsToGoals} mo to goals` : 'after expenses'}
+                    {selectedMonth && selectedMonthIndex > 0 
+                      ? `allocated to ${kpis.activeGoals} goals`
+                      : kpis.avgMonthsToGoals > 0 ? `~${kpis.avgMonthsToGoals} mo to goals` : 'after expenses'}
                   </p>
                 </CardContent>
               </Card>
@@ -553,11 +737,236 @@ export default function SummaryPage() {
             <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
               <span className="text-2xl">🤖</span> AI Financial Advisor
             </h2>
+            {selectedMonthIndex > 0 && selectedMonth && (
+              <div className="mb-4 p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+                <p className="text-sm text-indigo-700">
+                  📊 <strong>Note:</strong> The AI report below analyzes your overall financial health. 
+                  For {selectedMonth.monthLabel} projections, see the time-based goals section above 
+                  showing {selectedMonth.summary.activeGoalsCount} active goals with ${selectedMonth.financials.monthlySurplus.toLocaleString()} surplus.
+                </p>
+              </div>
+            )}
             <AIFinancialReport />
           </motion.div>
 
-          {/* Goal Projection Timeline */}
-          {projections && projections.goals.length > 0 && (
+          {/* Monthly Goal Projections - Time-bound view */}
+          {loading && monthlyProjections.length === 0 && (
+            <Card className="bg-white border border-slate-200 shadow-sm">
+              <CardContent className="p-6">
+                <div className="animate-pulse space-y-4">
+                  <div className="h-6 bg-slate-200 rounded w-1/3"></div>
+                  <div className="h-24 bg-slate-100 rounded"></div>
+                  <div className="h-24 bg-slate-100 rounded"></div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {selectedMonth && (selectedMonth.activeGoals.length > 0 || selectedMonth.completedGoals.length > 0 || selectedMonth.upcomingGoals.length > 0) && (
+            <motion.div
+              key={selectedMonthIndex}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <Card className="bg-white border border-slate-200 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-blue-600" />
+                      Goals for {selectedMonth.monthLabel}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {selectedMonthIndex > 0 && (
+                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">
+                          {selectedMonthIndex} month{selectedMonthIndex > 1 ? 's' : ''} ahead
+                        </span>
+                      )}
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {/* Goals starting this month */}
+                  {selectedMonth.activeGoals.filter(g => g.isStartingThisMonth).length > 0 && (
+                    <div className="mb-4 sm:mb-6">
+                      <h4 className="text-xs sm:text-sm font-semibold text-indigo-600 mb-2 sm:mb-3 flex items-center gap-2">
+                        <Rocket className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        Starting This Month
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedMonth.activeGoals.filter(g => g.isStartingThisMonth).map(goal => (
+                          <div key={goal.goalId} className="p-2.5 sm:p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-600 flex-shrink-0" />
+                                <span className="font-medium text-slate-900 text-sm truncate">{goal.title}</span>
+                              </div>
+                              <span className="text-xs sm:text-sm text-indigo-600 font-medium flex-shrink-0">
+                                ${goal.targetAmount.toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Goals completing this month */}
+                  {selectedMonth.activeGoals.filter(g => g.isCompletedThisMonth).length > 0 && (
+                    <div className="mb-4 sm:mb-6">
+                      <h4 className="text-xs sm:text-sm font-semibold text-green-600 mb-2 sm:mb-3 flex items-center gap-2">
+                        <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        Completing This Month 🎉
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedMonth.activeGoals.filter(g => g.isCompletedThisMonth).map(goal => (
+                          <div key={goal.goalId} className="p-2.5 sm:p-3 bg-green-50 rounded-lg border border-green-100">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600 flex-shrink-0" />
+                                <span className="font-medium text-slate-900 text-sm truncate">{goal.title}</span>
+                              </div>
+                              <span className="text-xs sm:text-sm text-green-600 font-medium flex-shrink-0">
+                                ${goal.targetAmount.toLocaleString()} ✓
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Active Goals */}
+                  {selectedMonth.activeGoals.filter(g => !g.isStartingThisMonth && !g.isCompletedThisMonth).length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                        <Target className="h-4 w-4" />
+                        Active Goals ({selectedMonth.activeGoals.filter(g => !g.isStartingThisMonth && !g.isCompletedThisMonth).length})
+                      </h4>
+                      {selectedMonth.activeGoals.filter(g => !g.isStartingThisMonth && !g.isCompletedThisMonth).map((goal, index) => {
+                        const statusConfig = {
+                          active: { bg: 'bg-blue-500', border: 'border-blue-200', icon: TrendingUp },
+                          completed: { bg: 'bg-green-500', border: 'border-green-200', icon: CheckCircle2 },
+                          not_started: { bg: 'bg-slate-400', border: 'border-slate-200', icon: Clock },
+                          at_risk: { bg: 'bg-red-500', border: 'border-red-200', icon: AlertTriangle }
+                        }
+                        const config = statusConfig[goal.status]
+                        const StatusIcon = config.icon
+                        
+                        return (
+                          <motion.div
+                            key={goal.goalId}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            className={`p-3 sm:p-4 rounded-xl border ${config.border} bg-gradient-to-r from-white to-slate-50`}
+                          >
+                            <div className="flex items-start justify-between mb-2 sm:mb-3 gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className={`w-7 h-7 sm:w-8 sm:h-8 ${config.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                                  <StatusIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="font-semibold text-slate-900 text-sm sm:text-base truncate">{goal.title}</h4>
+                                  <p className="text-xs text-slate-500 capitalize">{goal.category}</p>
+                                </div>
+                              </div>
+                              <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
+                                goal.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                goal.status === 'at_risk' ? 'bg-red-100 text-red-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {goal.status === 'at_risk' ? 'Risk' : 'Active'}
+                              </span>
+                            </div>
+                            
+                            {/* Progress bar */}
+                            <div className="mb-2 sm:mb-3">
+                              <div className="flex justify-between text-xs sm:text-sm mb-1">
+                                <span className="text-slate-600 truncate">
+                                  ${goal.projectedBalance.toLocaleString()} / ${goal.targetAmount.toLocaleString()}
+                                </span>
+                                <span className="font-semibold text-slate-900 ml-2">{Math.round(goal.progressPercentage)}%</span>
+                              </div>
+                              <div className="w-full bg-slate-200 rounded-full h-1.5 sm:h-2">
+                                <div 
+                                  className={`h-1.5 sm:h-2 rounded-full transition-all duration-500 ${config.bg}`}
+                                  style={{ width: `${Math.min(goal.progressPercentage, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Allocation info - responsive */}
+                            <div className="grid grid-cols-2 gap-2 sm:gap-4 text-xs sm:text-sm">
+                              <div>
+                                <p className="text-slate-500 truncate">Monthly</p>
+                                <p className="font-semibold text-green-600">+${goal.monthlyAllocation.toLocaleString()}</p>
+                              </div>
+                              <div className="text-right sm:text-left">
+                                <p className="text-slate-500">Due</p>
+                                <p className="font-medium text-slate-900">
+                                  {new Date(goal.deadline).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Upcoming Goals */}
+                  {selectedMonth.upcomingGoals.length > 0 && (
+                    <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-200">
+                      <h4 className="text-xs sm:text-sm font-semibold text-amber-600 mb-2 sm:mb-3 flex items-center gap-2">
+                        <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        Not Yet Started
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedMonth.upcomingGoals.map(goal => (
+                          <div key={goal.goalId} className="p-2.5 sm:p-3 bg-amber-50 rounded-lg border border-amber-100">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-slate-700 text-sm truncate">{goal.title}</span>
+                              <span className="text-xs text-amber-700 flex-shrink-0">{goal.startsInMonth}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Previously Completed */}
+                  {selectedMonth.completedGoals.length > 0 && (
+                    <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-200">
+                      <h4 className="text-xs sm:text-sm font-semibold text-green-600 mb-2 sm:mb-3 flex items-center gap-2">
+                        <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        Already Completed
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                        {selectedMonth.completedGoals.map(goal => (
+                          <span key={goal.goalId} className="px-2 sm:px-3 py-0.5 sm:py-1 bg-green-100 text-green-700 rounded-full text-xs sm:text-sm">
+                            ✓ {goal.title}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Surplus allocation */}
+                  {selectedMonth.financials.monthlySurplus > 0 && (
+                    <div className="mt-4 p-3 bg-blue-50 rounded-lg text-center">
+                      <p className="text-sm text-blue-700">
+                        <strong>${selectedMonth.financials.totalAllocatedToGoals.toLocaleString()}</strong> allocated to goals in {selectedMonth.monthLabel}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Fallback: Overall Goal Projection Timeline (when no monthly data) */}
+          {!selectedMonth && projections && projections.goals.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -734,7 +1143,7 @@ export default function SummaryPage() {
                       Create Your First Goal
                     </Button>
                     <div className="text-sm text-slate-500">
-                      Or add some <a href="/daily" className="text-indigo-600 hover:underline">daily transactions</a> to get started
+                      Or add some <a href="/recurring" className="text-indigo-600 hover:underline">one-time transactions</a> to get started
                     </div>
                   </div>
                 </div>

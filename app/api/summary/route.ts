@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { getMilestones, getGoals, getRecurringExpenses, getSideProjects, getTransactions, calculateDailyTarget, getIncomeSummary } from '@/lib/database'
+import { getMilestones, getGoals, getRecurringExpenses, getSideProjects, getTransactionsForMonth, calculateDailyTarget, getIncomeSummary } from '@/lib/database'
 
 export async function GET() {
   try {
@@ -18,14 +18,17 @@ export async function GET() {
       getGoals(userId),
       getRecurringExpenses(userId),
       getSideProjects(userId),
-      getTransactions(userId),
+      getTransactionsForMonth(userId),
       calculateDailyTarget(userId),
       getIncomeSummary(userId).catch(() => null) // Handle case where table doesn't exist yet
     ])
 
     // Calculate income from recent transactions
     const incomeTransactions = transactions.filter(t => t.type === 'income')
+    const expenseTransactions = transactions.filter(t => t.type === 'expense')
     const totalIncome = incomeTransactions.reduce((sum, t) => sum + t.amount, 0)
+    const totalExpenses = expenseTransactions.reduce((sum, t) => sum + t.amount, 0)
+    const oneTimeNet = totalIncome - totalExpenses
 
     return NextResponse.json({
       milestones,
@@ -40,7 +43,8 @@ export async function GET() {
         expenses: recurringExpenses.map(e => ({ name: e.name, amount: e.amount })),
         goals: goals.map(g => ({ title: g.title, current_amount: g.current_amount, target_amount: g.target_amount })),
         sideProjects: sideProjects.map(p => ({ name: p.name, current_monthly_earnings: p.current_monthly_earnings }))
-      }
+      },
+      oneTimeNet
     })
   } catch (error) {
     console.error('Error fetching summary data:', error)

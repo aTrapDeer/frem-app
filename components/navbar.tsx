@@ -63,12 +63,6 @@ export function Navbar() {
                   Dashboard
                 </Link>
                 <Link
-                  href="/daily"
-                  className="text-sm text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
-                >
-                  Daily
-                </Link>
-                <Link
                   href="/summary"
                   className="text-sm text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
                 >
@@ -84,7 +78,7 @@ export function Navbar() {
                   href="/recurring"
                   className="text-sm text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
                 >
-                  Recurring
+                  Budget
                 </Link>
                 <Link
                   href="/chat"
@@ -193,13 +187,6 @@ export function Navbar() {
                     Dashboard
                   </Link>
                   <Link
-                    href="/daily"
-                    className="block text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    Daily
-                  </Link>
-                  <Link
                     href="/summary"
                     className="block text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
                     onClick={() => setIsOpen(false)}
@@ -218,7 +205,7 @@ export function Navbar() {
                     className="block text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
                     onClick={() => setIsOpen(false)}
                   >
-                    Recurring
+                    Budget
                   </Link>
                   <Link
                     href="/chat"
