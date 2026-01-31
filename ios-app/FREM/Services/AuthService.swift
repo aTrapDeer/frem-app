@@ -66,9 +66,14 @@ class AuthService {
 
     // MARK: - Google Sign-In
 
-    /// Handle sign-in with Google credential
+    /// Handle sign-in with Google credential.
+    /// Must run on main thread so Google Sign-In can present UI and access view hierarchy.
+    @MainActor
     func signInWithGoogle() async throws {
-        guard let clientID = Config.googleClientID.isEmpty ? nil : Config.googleClientID,
+        let clientID = Config.googleClientID
+        
+        // Check if Google Sign-In is configured
+        guard !clientID.isEmpty,
               clientID != "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com" else {
             throw AuthError.googleSignInNotConfigured
         }
@@ -77,24 +82,30 @@ class AuthService {
         let config = GIDConfiguration(clientID: clientID)
         GIDSignIn.sharedInstance.configuration = config
 
-        // Get the root view controller
-        guard let windowScene = await UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootViewController = await windowScene.windows.first?.rootViewController else {
+        // Get the root view controller (must be on main thread for UI access)
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
             throw AuthError.invalidResponse
         }
 
-        // Sign in with Google
+        // Sign in with Google (presentation requires main thread)
         let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
         
-        guard let idToken = result.user.idToken?.tokenString,
-              let accessToken = result.user.accessToken.tokenString else {
+        guard let idToken = result.user.idToken?.tokenString else {
             throw AuthError.tokenExtractionFailed
         }
+        
+        let accessToken = result.user.accessToken.tokenString
 
-        // Send tokens to backend
-        guard let url = URL(string: "\(Config.apiBaseURL)/api/auth/mobile") else {
+        // Send tokens to backend (base URL has no trailing slash to avoid double slash)
+        let base = Config.apiBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: "\(base)/api/auth/mobile") else {
             throw APIError.invalidURL
         }
+
+        #if DEBUG
+        print("[FREM Auth] POST \(url.absoluteString)")
+        #endif
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -113,7 +124,24 @@ class AuthService {
             throw AuthError.invalidResponse
         }
 
+        #if DEBUG
+        let responseBody = String(data: data, encoding: .utf8) ?? ""
+        print("[FREM Auth] Response \(httpResponse.statusCode): \(responseBody.prefix(500))")
+        #endif
+
         guard httpResponse.statusCode == 200 else {
+            // Parse error message from response for debugging and user feedback
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let errorMessage = (json["error"] as? String) ?? ""
+                let details = (json["details"] as? String).map { " \($0)" } ?? ""
+                let message = errorMessage + details
+                #if DEBUG
+                print("[FREM Auth] Server error: \(message)")
+                #endif
+                if !message.isEmpty {
+                    throw AuthError.serverError(statusCode: httpResponse.statusCode, message: message.trimmingCharacters(in: .whitespaces))
+                }
+            }
             if httpResponse.statusCode == 401 {
                 throw AuthError.invalidResponse
             }
@@ -180,6 +208,7 @@ enum AuthError: LocalizedError {
     case googleSignInNotConfigured
     case invalidResponse
     case tokenExtractionFailed
+    case serverError(statusCode: Int, message: String?)
 
     var errorDescription: String? {
         switch self {
@@ -189,6 +218,9 @@ enum AuthError: LocalizedError {
             return "Invalid response from auth server"
         case .tokenExtractionFailed:
             return "Could not extract session token"
+        case .serverError(let code, let msg):
+            if let msg = msg, !msg.isEmpty { return "\(msg) (HTTP \(code))" }
+            return "Server error (HTTP \(code))"
         }
     }
 }

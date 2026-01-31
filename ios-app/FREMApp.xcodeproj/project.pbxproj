@@ -49,6 +49,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		3641DB2E2F2E9EC100B98A71 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B1000001 /* FREMApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FREMApp.swift; sourceTree = "<group>"; };
 		B1000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B1000003 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -113,6 +114,7 @@
 		E1000001 /* FREM */ = {
 			isa = PBXGroup;
 			children = (
+				3641DB2E2F2E9EC100B98A71 /* Info.plist */,
 				B1000001 /* FREMApp.swift */,
 				B1000002 /* ContentView.swift */,
 				B1000003 /* Assets.xcassets */,
@@ -497,6 +499,7 @@
 				DEVELOPMENT_TEAM = Y8TJKJRU9V;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FREM/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FREM;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -529,6 +532,7 @@
 				DEVELOPMENT_TEAM = Y8TJKJRU9V;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FREM/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = FREM;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

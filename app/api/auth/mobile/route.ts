@@ -8,12 +8,24 @@ import { generateUUID, getCurrentTimestamp } from '@/lib/turso'
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
+    let body: { idToken?: string; accessToken?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid request body', details: 'Request body must be valid JSON' },
+        { status: 400 }
+      )
+    }
+
     const { idToken, accessToken } = body
 
     if (!idToken || !accessToken) {
       return NextResponse.json(
-        { error: 'Missing ID token or access token' },
+        {
+          error: 'Missing ID token or access token',
+          details: !idToken ? 'idToken is required' : 'accessToken is required',
+        },
         { status: 400 }
       )
     }
@@ -22,19 +34,31 @@ export async function POST(request: Request) {
     const googleUserInfo = await fetch(
       `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`
     )
-    
+
     if (!googleUserInfo.ok) {
+      const text = await googleUserInfo.text()
+      console.error('[auth/mobile] Google userinfo failed:', googleUserInfo.status, text)
       return NextResponse.json(
-        { error: 'Failed to verify Google token' },
+        { error: 'Failed to verify Google token', details: `Google returned ${googleUserInfo.status}` },
         { status: 401 }
       )
     }
 
-    const googleUser = await googleUserInfo.json()
-    
+    const googleUser = (await googleUserInfo.json()) as {
+      sub?: string
+      id?: string
+      email?: string
+      name?: string
+      picture?: string
+    }
+
     if (!googleUser.email) {
+      console.error('[auth/mobile] Google response missing email. Keys:', Object.keys(googleUser))
       return NextResponse.json(
-        { error: 'Invalid Google user data' },
+        {
+          error: 'Invalid Google user data',
+          details: 'No email in Google response. Ensure the app requests email scope.',
+        },
         { status: 400 }
       )
     }
@@ -45,8 +69,11 @@ export async function POST(request: Request) {
       args: [googleUser.email]
     })
 
+    type UserRow = { id: string; name: string | null; email: string; image: string | null }
+    type UserInfo = { id: string; name: string | null; email: string; image: string | null }
+
     let userId: string
-    let user: any
+    let user: UserInfo
     const now = getCurrentTimestamp()
 
     if (userResult.rows.length === 0) {
@@ -82,7 +109,7 @@ export async function POST(request: Request) {
       }
     } else {
       // User exists - update if needed
-      const row = userResult.rows[0] as any
+      const row = userResult.rows[0] as UserRow
       userId = row.id
       
       // Update user info if changed
