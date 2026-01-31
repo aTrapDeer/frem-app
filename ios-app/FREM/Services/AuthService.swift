@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import UIKit
+import GoogleSignIn
 
 @Observable
 class AuthService {
@@ -65,28 +67,84 @@ class AuthService {
     // MARK: - Google Sign-In
 
     /// Handle sign-in with Google credential
-    /// In production, integrate GoogleSignIn SDK:
-    /// 1. Add GoogleSignIn SPM package
-    /// 2. Call GIDSignIn.sharedInstance.signIn()
-    /// 3. Send the ID token to your NextAuth endpoint
-    /// 4. Receive session token back
     func signInWithGoogle() async throws {
-        // TODO: Integrate GoogleSignIn SDK
-        // This is the flow:
-        //
-        // 1. GIDSignIn.sharedInstance.signIn(withPresenting: rootVC) { result, error in
-        //      let idToken = result?.user.idToken?.tokenString
-        //      let accessToken = result?.user.accessToken.tokenString
-        // }
-        //
-        // 2. POST to /api/auth/callback/google with the tokens
-        //
-        // 3. Extract session token from response cookies
-        //
-        // 4. Save to Keychain
+        guard let clientID = Config.googleClientID.isEmpty ? nil : Config.googleClientID,
+              clientID != "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com" else {
+            throw AuthError.googleSignInNotConfigured
+        }
 
-        // For now, placeholder that shows the flow:
-        throw AuthError.googleSignInNotConfigured
+        // Configure Google Sign-In
+        let config = GIDConfiguration(clientID: clientID)
+        GIDSignIn.sharedInstance.configuration = config
+
+        // Get the root view controller
+        guard let windowScene = await UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = await windowScene.windows.first?.rootViewController else {
+            throw AuthError.invalidResponse
+        }
+
+        // Sign in with Google
+        let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
+        
+        guard let idToken = result.user.idToken?.tokenString,
+              let accessToken = result.user.accessToken.tokenString else {
+            throw AuthError.tokenExtractionFailed
+        }
+
+        // Send tokens to backend
+        guard let url = URL(string: "\(Config.apiBaseURL)/api/auth/mobile") else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: String] = [
+            "idToken": idToken,
+            "accessToken": accessToken
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            if httpResponse.statusCode == 401 {
+                throw AuthError.invalidResponse
+            }
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+
+        // Parse response
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let sessionToken = json["sessionToken"] as? String,
+              let userDict = json["user"] as? [String: Any],
+              let userId = userDict["id"] as? String else {
+            throw AuthError.tokenExtractionFailed
+        }
+
+        let userName = userDict["name"] as? String
+        let userEmail = userDict["email"] as? String
+        let userImage = userDict["image"] as? String
+
+        let user = User(
+            id: userId,
+            name: userName,
+            email: userEmail,
+            image: userImage,
+            createdAt: nil,
+            updatedAt: nil
+        )
+
+        // Save session
+        await MainActor.run {
+            self.completeSignIn(sessionToken: sessionToken, user: user)
+        }
     }
 
     /// Complete sign-in after receiving session data from OAuth callback

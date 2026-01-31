@@ -181,7 +181,7 @@ class APIService {
     }
 
     func sendAIChatMessage(messages: [AIChatMessage]) async throws -> AIChatResponse {
-        let body = ["messages": messages]
+        let body = ChatRequest(messages: messages)
         return try await request("/api/ai-chat", method: "POST", body: body)
     }
 
@@ -195,9 +195,6 @@ class APIService {
         try await request("/api/user/settings", method: "PUT", body: settings)
     }
 }
-
-// Make array of AIChatMessage encodable for the chat endpoint
-extension Array: @retroactive Encodable where Element == AIChatMessage {}
 
 // Wrapper to encode messages array
 private struct ChatRequest: Encodable {

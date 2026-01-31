@@ -7,47 +7,48 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A1000001 /* FREMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001; };
-		A1000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002; };
-		A1000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000003; };
-		A1000010 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000010; };
-		A1000011 /* Transaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000011; };
-		A1000012 /* Goal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000012; };
-		A1000013 /* RecurringExpense.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000013; };
-		A1000014 /* IncomeSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000014; };
-		A1000015 /* SideProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000015; };
-		A1000016 /* Milestone.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000016; };
-		A1000017 /* DashboardData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000017; };
-		A1000018 /* Projection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000018; };
-		A1000020 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000020; };
-		A1000021 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000021; };
-		A1000022 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000022; };
-		A1000030 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000030; };
-		A1000031 /* DailyViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000031; };
-		A1000032 /* GoalsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000032; };
-		A1000033 /* BudgetViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000033; };
-		A1000034 /* SummaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000034; };
-		A1000035 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000035; };
-		A1000040 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000040; };
-		A1000041 /* DailyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000041; };
-		A1000042 /* GoalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000042; };
-		A1000043 /* GoalFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000043; };
-		A1000044 /* BudgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000044; };
-		A1000045 /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000045; };
-		A1000046 /* AIChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000046; };
-		A1000047 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000047; };
-		A1000050 /* FREMCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000050; };
-		A1000051 /* KPICard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000051; };
-		A1000052 /* GoalProjectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000052; };
-		A1000053 /* TransactionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000053; };
-		A1000054 /* ProgressRing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000054; };
-		A1000060 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000060; };
-		A1000061 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000061; };
-		A1000062 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000062; };
+		3641DB2B2F2E9B2F00B98A71 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 3641DB2A2F2E9B2F00B98A71 /* GoogleSignIn */; };
+		3641DB2D2F2E9B2F00B98A71 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 3641DB2C2F2E9B2F00B98A71 /* GoogleSignInSwift */; };
+		A1000001 /* FREMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001 /* FREMApp.swift */; };
+		A1000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002 /* ContentView.swift */; };
+		A1000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000003 /* Assets.xcassets */; };
+		A1000010 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000010 /* User.swift */; };
+		A1000011 /* Transaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000011 /* Transaction.swift */; };
+		A1000012 /* Goal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000012 /* Goal.swift */; };
+		A1000013 /* RecurringExpense.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000013 /* RecurringExpense.swift */; };
+		A1000014 /* IncomeSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000014 /* IncomeSource.swift */; };
+		A1000015 /* SideProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000015 /* SideProject.swift */; };
+		A1000016 /* Milestone.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000016 /* Milestone.swift */; };
+		A1000017 /* DashboardData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000017 /* DashboardData.swift */; };
+		A1000018 /* Projection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000018 /* Projection.swift */; };
+		A1000020 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000020 /* APIService.swift */; };
+		A1000021 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000021 /* AuthService.swift */; };
+		A1000022 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000022 /* KeychainHelper.swift */; };
+		A1000030 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000030 /* DashboardViewModel.swift */; };
+		A1000031 /* DailyViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000031 /* DailyViewModel.swift */; };
+		A1000032 /* GoalsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000032 /* GoalsViewModel.swift */; };
+		A1000033 /* BudgetViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000033 /* BudgetViewModel.swift */; };
+		A1000034 /* SummaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000034 /* SummaryViewModel.swift */; };
+		A1000035 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000035 /* ChatViewModel.swift */; };
+		A1000040 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000040 /* DashboardView.swift */; };
+		A1000041 /* DailyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000041 /* DailyView.swift */; };
+		A1000042 /* GoalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000042 /* GoalsView.swift */; };
+		A1000043 /* GoalFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000043 /* GoalFormView.swift */; };
+		A1000044 /* BudgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000044 /* BudgetView.swift */; };
+		A1000045 /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000045 /* SummaryView.swift */; };
+		A1000046 /* AIChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000046 /* AIChatView.swift */; };
+		A1000047 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000047 /* LoginView.swift */; };
+		A1000050 /* FREMCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000050 /* FREMCard.swift */; };
+		A1000051 /* KPICard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000051 /* KPICard.swift */; };
+		A1000052 /* GoalProjectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000052 /* GoalProjectionCard.swift */; };
+		A1000053 /* TransactionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000053 /* TransactionRow.swift */; };
+		A1000054 /* ProgressRing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000054 /* ProgressRing.swift */; };
+		A1000060 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000060 /* Theme.swift */; };
+		A1000061 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000061 /* Extensions.swift */; };
+		A1000062 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000062 /* Constants.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		C1000000 /* FREM.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FREM.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1000001 /* FREMApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FREMApp.swift; sourceTree = "<group>"; };
 		B1000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B1000003 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -85,6 +86,7 @@
 		B1000060 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B1000061 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
 		B1000062 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		C1000000 /* FREM.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FREM.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +94,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3641DB2B2F2E9B2F00B98A71 /* GoogleSignIn in Frameworks */,
+				3641DB2D2F2E9B2F00B98A71 /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -104,14 +108,6 @@
 				E1000001 /* FREM */,
 				E1000099 /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		E1000099 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				C1000000 /* FREM.app */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		E1000001 /* FREM */ = {
@@ -262,12 +258,20 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
+		E1000099 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C1000000 /* FREM.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		F1000000 /* FREM */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = F1000010;
+			buildConfigurationList = F1000010 /* Build configuration list for PBXNativeTarget "FREM" */;
 			buildPhases = (
 				F1000001 /* Sources */,
 				D1000000 /* Frameworks */,
@@ -297,7 +301,7 @@
 					};
 				};
 			};
-			buildConfigurationList = F2000010;
+			buildConfigurationList = F2000010 /* Build configuration list for PBXProject "FREMApp" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -306,6 +310,9 @@
 				Base,
 			);
 			mainGroup = E1000000;
+			packageReferences = (
+				3641DB292F2E9B2F00B98A71 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			productRefGroup = E1000099 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -487,7 +494,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Y8TJKJRU9V;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = FREM;
@@ -519,7 +526,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Y8TJKJRU9V;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = FREM;
@@ -547,15 +554,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		F2000010 /* Build configuration list for PBXProject "FREM" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				G1000001 /* Debug */,
-				G1000002 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		F1000010 /* Build configuration list for PBXNativeTarget "FREM" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -565,8 +563,40 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		F2000010 /* Build configuration list for PBXProject "FREMApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G1000001 /* Debug */,
+				G1000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		3641DB292F2E9B2F00B98A71 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		3641DB2A2F2E9B2F00B98A71 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3641DB292F2E9B2F00B98A71 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		3641DB2C2F2E9B2F00B98A71 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3641DB292F2E9B2F00B98A71 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F2000000 /* Project object */;
 }
