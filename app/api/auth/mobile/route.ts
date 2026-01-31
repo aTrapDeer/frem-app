@@ -139,8 +139,8 @@ export async function POST(request: Request) {
 
     if (accountResult.rows.length === 0) {
       await db.execute({
-        sql: `INSERT INTO accounts (id, user_id, type, provider, provider_account_id, access_token, id_token, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO accounts (id, user_id, type, provider, provider_account_id, access_token, id_token)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
         args: [
           generateUUID(),
           userId,
@@ -148,20 +148,17 @@ export async function POST(request: Request) {
           'google',
           googleUser.sub || googleUser.id || '',
           accessToken,
-          idToken,
-          now,
-          now
+          idToken
         ]
       })
     } else {
       // Update account tokens
       await db.execute({
-        sql: `UPDATE accounts SET access_token = ?, id_token = ?, updated_at = ? 
+        sql: `UPDATE accounts SET access_token = ?, id_token = ? 
               WHERE provider = ? AND provider_account_id = ?`,
         args: [
           accessToken,
           idToken,
-          now,
           'google',
           googleUser.sub || googleUser.id || ''
         ]
