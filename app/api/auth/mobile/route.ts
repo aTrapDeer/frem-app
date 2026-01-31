@@ -103,13 +103,13 @@ export async function POST(request: Request) {
 
       user = {
         id: userId,
-        name: googleUser.name,
+        name: googleUser.name ?? null,
         email: googleUser.email,
-        image: googleUser.picture
+        image: googleUser.picture ?? null
       }
     } else {
       // User exists - update if needed
-      const row = userResult.rows[0] as UserRow
+      const row = userResult.rows[0] as unknown as UserRow
       userId = row.id
       
       // Update user info if changed
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
     // Check if account exists, create if not
     const accountResult = await db.execute({
       sql: `SELECT * FROM accounts WHERE provider = ? AND provider_account_id = ?`,
-      args: ['google', googleUser.sub || googleUser.id]
+      args: ['google', googleUser.sub || googleUser.id || '']
     })
 
     if (accountResult.rows.length === 0) {
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
           userId,
           'oauth',
           'google',
-          googleUser.sub || googleUser.id,
+          googleUser.sub || googleUser.id || '',
           accessToken,
           idToken,
           now,
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
           idToken,
           now,
           'google',
-          googleUser.sub || googleUser.id
+          googleUser.sub || googleUser.id || ''
         ]
       })
     }
