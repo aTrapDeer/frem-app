@@ -15,7 +15,7 @@ struct ContentView: View {
                     ProgressView()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.white)
+                .background(Color.fremBackground)
             } else if !auth.isAuthenticated {
                 LoginView()
             } else {
@@ -60,6 +60,13 @@ struct ContentView: View {
                     Text("Summary")
                 }
                 .tag(4)
+
+            SettingsView()
+                .tabItem {
+                    Image(systemName: "gearshape")
+                    Text("Settings")
+                }
+                .tag(5)
         }
         .tint(.fremBlue)
     }

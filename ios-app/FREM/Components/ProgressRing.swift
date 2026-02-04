@@ -11,7 +11,7 @@ struct ProgressRing: View {
         ZStack {
             // Background ring
             Circle()
-                .stroke(Color.fremSlate200, lineWidth: lineWidth)
+                .stroke(Color.fremBorder, lineWidth: lineWidth)
 
             // Progress ring
             Circle()
@@ -36,7 +36,7 @@ struct GoalLikelihoodRing: View {
 
     private var likelihood: (percentage: Double, label: String, color: Color, trend: String) {
         guard let projections = projections, !projections.goals.isEmpty else {
-            return (0, "No Goals", .fremSlate500, "neutral")
+            return (0, "No Goals", .fremTextTertiary, "neutral")
         }
 
         let statusWeights: [ProjectionStatus: Double] = [
@@ -92,7 +92,7 @@ struct GoalLikelihoodRing: View {
                 } else {
                     Text("Add goals to track")
                         .font(.system(size: 12))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                 }
             }
         }

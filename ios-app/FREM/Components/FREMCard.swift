@@ -10,9 +10,9 @@ struct FREMCard<Content: View>: View {
     var body: some View {
         content
             .padding()
-            .background(Color.white)
+            .background(Color.fremCardBg)
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+            .shadow(color: .fremShadow, radius: 8, x: 0, y: 2)
     }
 }
 
@@ -32,7 +32,7 @@ struct FREMSectionHeader: View {
 
             Text(title)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.fremSlate900)
+                .foregroundColor(.fremTextPrimary)
         }
     }
 }

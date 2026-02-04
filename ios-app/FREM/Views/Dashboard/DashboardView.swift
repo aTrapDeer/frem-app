@@ -19,7 +19,7 @@ struct DashboardView: View {
                 }
                 .padding()
             }
-            .background(Color.fremSlate50)
+            .background(Color.fremBackground)
             .navigationTitle("Dashboard")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -49,7 +49,7 @@ struct DashboardView: View {
         VStack(spacing: 16) {
             ForEach(0..<3) { _ in
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.fremSlate100)
+                    .fill(Color.fremSurfaceAlt)
                     .frame(height: 120)
                     .shimmering()
             }
@@ -67,7 +67,7 @@ struct DashboardView: View {
                     HStack {
                         Label("Goal Likelihood", systemImage: "gauge.medium")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.fremSlate600)
+                            .foregroundColor(.fremTextSecondary)
                         Spacer()
                     }
                     GoalLikelihoodRing(projections: viewModel.projections)
@@ -80,7 +80,7 @@ struct DashboardView: View {
                     HStack {
                         Label("Monthly Surplus", systemImage: "dollarsign.circle")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.fremSlate600)
+                            .foregroundColor(.fremTextSecondary)
                         Spacer()
                     }
 
@@ -111,7 +111,7 @@ struct DashboardView: View {
                 title: "Monthly Expenses",
                 icon: "creditcard",
                 value: (viewModel.dashboardData?.monthlyRecurringTotal ?? 0).asCurrency,
-                iconColor: .fremSlate600
+                iconColor: .fremTextSecondary
             )
         }
     }
@@ -140,7 +140,7 @@ struct DashboardView: View {
                         VStack(alignment: .trailing) {
                             Text("Monthly Surplus")
                                 .font(.system(size: 11))
-                                .foregroundColor(.fremSlate500)
+                                .foregroundColor(.fremTextTertiary)
                             Text("+\(projections.monthlySurplus.asCurrency)")
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.fremGreen)
@@ -155,7 +155,7 @@ struct DashboardView: View {
                         NavigationLink {
                             GoalsView()
                         } label: {
-                            Text("View all \(projections.goals.count) goals →")
+                            Text("View all \(projections.goals.count) goals \u{2192}")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.fremBlue)
                                 .frame(maxWidth: .infinity)
@@ -166,7 +166,7 @@ struct DashboardView: View {
                 .padding()
                 .background(
                     LinearGradient(
-                        colors: [.fremSlate50, Color.fremBlue.opacity(0.05)],
+                        colors: [.fremSurface, Color.fremBlue.opacity(0.05)],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
@@ -174,7 +174,7 @@ struct DashboardView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.fremSlate200, lineWidth: 1)
+                        .stroke(Color.fremBorder, lineWidth: 1)
                 )
             }
         }
@@ -198,10 +198,10 @@ struct DashboardView: View {
         VStack(spacing: 4) {
             Text(value)
                 .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.fremSlate900)
+                .foregroundColor(.fremTextPrimary)
             Text(title)
                 .font(.system(size: 12))
-                .foregroundColor(.fremSlate600)
+                .foregroundColor(.fremTextSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding()
@@ -239,14 +239,14 @@ struct DashboardView: View {
                 .foregroundColor(color)
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.fremSlate900)
+                .foregroundColor(.fremTextPrimary)
             Text(subtitle)
                 .font(.system(size: 11))
-                .foregroundColor(.fremSlate600)
+                .foregroundColor(.fremTextSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding()
-        .background(Color.fremSlate50)
+        .background(Color.fremSurface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
@@ -260,7 +260,7 @@ struct ShimmerModifier: ViewModifier {
         content
             .overlay(
                 LinearGradient(
-                    colors: [.clear, .white.opacity(0.4), .clear],
+                    colors: [.clear, .fremCardBg.opacity(0.4), .clear],
                     startPoint: .leading,
                     endPoint: .trailing
                 )

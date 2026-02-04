@@ -5,8 +5,8 @@ struct KPICard: View {
     let icon: String
     let value: String
     var subtitle: String?
-    var valueColor: Color = .fremSlate900
-    var iconColor: Color = .fremSlate600
+    var valueColor: Color = .fremTextPrimary
+    var iconColor: Color = .fremTextSecondary
     var progress: Double?
     var target: String?
 
@@ -15,7 +15,7 @@ struct KPICard: View {
             HStack {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.fremSlate600)
+                    .foregroundColor(.fremTextSecondary)
                 Spacer()
                 Image(systemName: icon)
                     .font(.system(size: 14))
@@ -30,14 +30,14 @@ struct KPICard: View {
                 if let target = target {
                     Text("/\(target)")
                         .font(.system(size: 16))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                 }
             }
 
             if let subtitle = subtitle {
                 Text(subtitle)
                     .font(.system(size: 12))
-                    .foregroundColor(.fremSlate500)
+                    .foregroundColor(.fremTextTertiary)
             }
 
             if let progress = progress {
@@ -46,12 +46,12 @@ struct KPICard: View {
 
                 Text("\(Int(progress * 100))% of target")
                     .font(.system(size: 11))
-                    .foregroundColor(.fremSlate600)
+                    .foregroundColor(.fremTextSecondary)
             }
         }
         .padding()
-        .background(Color.white)
+        .background(Color.fremCardBg)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        .shadow(color: .fremShadow, radius: 8, x: 0, y: 2)
     }
 }

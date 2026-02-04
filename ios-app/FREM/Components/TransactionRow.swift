@@ -29,13 +29,13 @@ struct TransactionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(transaction.description)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.fremSlate900)
+                    .foregroundColor(.fremTextPrimary)
                     .lineLimit(1)
 
                 if !formattedTime.isEmpty {
                     Text(formattedTime)
                         .font(.system(size: 12))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                 }
             }
 
@@ -47,7 +47,7 @@ struct TransactionRow: View {
                 .foregroundColor(isIncome ? .fremGreen : .fremRed)
         }
         .padding(12)
-        .background(Color.fremSlate50)
+        .background(Color.fremSurface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }

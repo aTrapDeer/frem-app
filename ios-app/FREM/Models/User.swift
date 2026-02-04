@@ -24,6 +24,8 @@ struct UserSettings: Codable {
     var notificationsEnabled: Bool
     var darkMode: Bool
     var weeklySummaryEmail: Bool
+    var bankReserveAmount: Double
+    var bankReserveType: String
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -34,6 +36,8 @@ struct UserSettings: Codable {
         case notificationsEnabled = "notifications_enabled"
         case darkMode = "dark_mode"
         case weeklySummaryEmail = "weekly_summary_email"
+        case bankReserveAmount = "bank_reserve_amount"
+        case bankReserveType = "bank_reserve_type"
     }
 
     init(from decoder: Decoder) throws {
@@ -46,6 +50,8 @@ struct UserSettings: Codable {
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         darkMode = try container.decodeIfPresent(Bool.self, forKey: .darkMode) ?? false
         weeklySummaryEmail = try container.decodeIfPresent(Bool.self, forKey: .weeklySummaryEmail) ?? true
+        bankReserveAmount = try container.decodeIfPresent(Double.self, forKey: .bankReserveAmount) ?? 0
+        bankReserveType = try container.decodeIfPresent(String.self, forKey: .bankReserveType) ?? "amount"
     }
 
     static let `default` = UserSettings(
@@ -54,7 +60,9 @@ struct UserSettings: Codable {
         preferredLanguage: "en",
         notificationsEnabled: true,
         darkMode: false,
-        weeklySummaryEmail: true
+        weeklySummaryEmail: true,
+        bankReserveAmount: 0,
+        bankReserveType: "amount"
     )
 
     init(
@@ -63,7 +71,9 @@ struct UserSettings: Codable {
         preferredLanguage: String = "en",
         notificationsEnabled: Bool = true,
         darkMode: Bool = false,
-        weeklySummaryEmail: Bool = true
+        weeklySummaryEmail: Bool = true,
+        bankReserveAmount: Double = 0,
+        bankReserveType: String = "amount"
     ) {
         self.id = nil
         self.userId = nil
@@ -73,5 +83,7 @@ struct UserSettings: Codable {
         self.notificationsEnabled = notificationsEnabled
         self.darkMode = darkMode
         self.weeklySummaryEmail = weeklySummaryEmail
+        self.bankReserveAmount = bankReserveAmount
+        self.bankReserveType = bankReserveType
     }
 }

@@ -18,6 +18,15 @@ struct GoalProjection: Codable, Identifiable {
     let daysAheadOrBehind: Int
     let status: ProjectionStatus
     let category: String
+    let suggestedDeadline: String?
+
+    enum CodingKeys: String, CodingKey {
+        case goalId, title, targetAmount, currentAmount, projectedAmount
+        case totalProjectedProgress, progressPercentage, monthlyAllocation
+        case urgencyScore, originalDeadline, projectedCompletionDate
+        case daysUntilProjectedCompletion, isOnTrack, daysAheadOrBehind
+        case status, category, suggestedDeadline
+    }
 
     var statusConfig: (color: String, iconName: String) {
         switch status {
@@ -44,6 +53,7 @@ struct ProjectionSummary: Codable {
     let totalMonthlyExpenses: Double
     let monthlySurplus: Double
     let surplusAllocatedToGoals: Double?
+    let bankReserve: Double?
     let hasVariableIncome: Bool
 }
 
@@ -75,24 +85,42 @@ struct GoalAllocation: Codable {
     }
 }
 
-struct SummaryData: Codable {
-    let totalIncome: Double?
-    let totalExpenses: Double?
-    let netSavings: Double?
-    let savingsRate: Double?
-    let monthlyIncome: Double?
-    let monthlyExpenses: Double?
-    let monthlySurplus: Double?
+struct SummaryResponse: Codable {
+    let milestones: [FinancialMilestone]?
+    let goals: [FinancialGoal]?
+    let recurringExpenses: [RecurringExpense]?
+    let transactions: [Transaction]?
+    let targetCalculation: DailyTargetData?
+    let incomeSummary: IncomeSummaryData?
+    let financialData: FinancialDataSummary?
+    let oneTimeNet: Double?
 
-    enum CodingKeys: String, CodingKey {
-        case totalIncome = "total_income"
-        case totalExpenses = "total_expenses"
-        case netSavings = "net_savings"
-        case savingsRate = "savings_rate"
-        case monthlyIncome = "monthly_income"
-        case monthlyExpenses = "monthly_expenses"
-        case monthlySurplus = "monthly_surplus"
+    var monthlyIncome: Double {
+        incomeSummary?.totalMonthlyMid ?? financialData?.income ?? 0
     }
+
+    var monthlyExpenses: Double {
+        targetCalculation?.monthlyRecurringTotal ?? recurringExpenses?.reduce(0) { $0 + $1.amount } ?? 0
+    }
+
+    var netSavings: Double {
+        monthlyIncome - monthlyExpenses
+    }
+
+    var savingsRate: Double {
+        monthlyIncome > 0 ? (netSavings / monthlyIncome) * 100 : 0
+    }
+}
+
+struct FinancialDataSummary: Codable {
+    let income: Double?
+}
+
+struct IncomeSummaryData: Codable {
+    let totalMonthlyLow: Double?
+    let totalMonthlyMid: Double?
+    let totalMonthlyHigh: Double?
+    let sourceCount: Int?
 }
 
 struct AIChatMessage: Codable, Identifiable {
@@ -104,6 +132,17 @@ struct AIChatMessage: Codable, Identifiable {
         self.id = id
         self.role = role
         self.content = content
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case role, content
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = UUID().uuidString
+        self.role = try container.decode(String.self, forKey: .role)
+        self.content = try container.decode(String.self, forKey: .content)
     }
 }
 

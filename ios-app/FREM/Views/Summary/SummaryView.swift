@@ -18,7 +18,7 @@ struct SummaryView: View {
                 }
                 .padding()
             }
-            .background(Color.fremSlate50)
+            .background(Color.fremBackground)
             .navigationTitle("Summary")
             .refreshable {
                 await viewModel.loadData()
@@ -39,25 +39,25 @@ struct SummaryView: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     overviewCard(
                         title: "Monthly Income",
-                        value: (summary.monthlyIncome ?? 0).asCurrency,
+                        value: summary.monthlyIncome.asCurrency,
                         color: .fremGreen,
                         icon: "arrow.up.circle.fill"
                     )
                     overviewCard(
                         title: "Monthly Expenses",
-                        value: (summary.monthlyExpenses ?? 0).asCurrency,
+                        value: summary.monthlyExpenses.asCurrency,
                         color: .fremRed,
                         icon: "arrow.down.circle.fill"
                     )
                     overviewCard(
                         title: "Net Savings",
-                        value: (summary.netSavings ?? 0).asCurrency,
-                        color: (summary.netSavings ?? 0) >= 0 ? .fremBlue : .fremRed,
+                        value: summary.netSavings.asCurrency,
+                        color: summary.netSavings >= 0 ? .fremBlue : .fremRed,
                         icon: "banknote.fill"
                     )
                     overviewCard(
                         title: "Savings Rate",
-                        value: "\(Int(summary.savingsRate ?? 0))%",
+                        value: "\(Int(summary.savingsRate))%",
                         color: .fremEmerald,
                         icon: "percent"
                     )
@@ -65,7 +65,7 @@ struct SummaryView: View {
             } else {
                 Text("No summary data available")
                     .font(.system(size: 14))
-                    .foregroundColor(.fremSlate500)
+                    .foregroundColor(.fremTextTertiary)
                     .frame(maxWidth: .infinity)
                     .padding()
             }
@@ -81,10 +81,10 @@ struct SummaryView: View {
                 .foregroundColor(color)
             Text(value)
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.fremSlate900)
+                .foregroundColor(.fremTextPrimary)
             Text(title)
                 .font(.system(size: 11))
-                .foregroundColor(.fremSlate500)
+                .foregroundColor(.fremTextTertiary)
         }
         .frame(maxWidth: .infinity)
         .padding()
@@ -119,19 +119,19 @@ struct SummaryView: View {
                     ProgressView()
                     Text("Analyzing your finances...")
                         .font(.system(size: 13))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
             } else if let report = viewModel.aiReport {
                 Text(report)
                     .font(.system(size: 14))
-                    .foregroundColor(.fremSlate900)
+                    .foregroundColor(.fremTextPrimary)
                     .lineSpacing(4)
             } else {
                 Text("Tap 'Generate Report' for AI-powered financial insights and recommendations.")
                     .font(.system(size: 13))
-                    .foregroundColor(.fremSlate500)
+                    .foregroundColor(.fremTextTertiary)
             }
         }
         .padding()
@@ -147,7 +147,7 @@ struct SummaryView: View {
             if viewModel.milestones.isEmpty {
                 Text("No milestones yet. Add milestones from the web app to track major financial achievements.")
                     .font(.system(size: 13))
-                    .foregroundColor(.fremSlate500)
+                    .foregroundColor(.fremTextTertiary)
                     .frame(maxWidth: .infinity)
                     .padding()
             } else {
@@ -163,12 +163,12 @@ struct SummaryView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(milestone.title)
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.fremSlate900)
+                                .foregroundColor(.fremTextPrimary)
 
                             if let target = milestone.targetAmount {
                                 Text("\(milestone.currentAmount.asCurrency) / \(target.asCurrency)")
                                     .font(.system(size: 12))
-                                    .foregroundColor(.fremSlate500)
+                                    .foregroundColor(.fremTextTertiary)
                             }
                         }
 
@@ -183,7 +183,7 @@ struct SummaryView: View {
                             .clipShape(Capsule())
                     }
                     .padding(10)
-                    .background(Color.fremSlate50)
+                    .background(Color.fremSurface)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
             }
@@ -194,10 +194,10 @@ struct SummaryView: View {
 
     private func milestoneStatusColor(_ status: MilestoneStatus) -> Color {
         switch status {
-        case .planned: return .fremSlate500
+        case .planned: return .fremTextTertiary
         case .inProgress: return .fremBlue
         case .completed: return .fremGreen
-        case .cancelled: return .fremSlate200
+        case .cancelled: return .fremPlaceholder
         }
     }
 }

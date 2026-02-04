@@ -27,7 +27,7 @@ struct AIChatView: View {
                                         .scaleEffect(0.8)
                                     Text("Thinking...")
                                         .font(.system(size: 13))
-                                        .foregroundColor(.fremSlate500)
+                                        .foregroundColor(.fremTextTertiary)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal)
@@ -63,7 +63,7 @@ struct AIChatView: View {
                         .lineLimit(1...4)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color.fremSlate50)
+                        .background(Color.fremSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .focused($isInputFocused)
 
@@ -72,13 +72,13 @@ struct AIChatView: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 32))
-                            .foregroundColor(viewModel.inputText.trimmingCharacters(in: .whitespaces).isEmpty ? .fremSlate200 : .fremBlue)
+                            .foregroundColor(viewModel.inputText.trimmingCharacters(in: .whitespaces).isEmpty ? .fremPlaceholder : .fremBlue)
                     }
                     .disabled(viewModel.inputText.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isSending)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
-                .background(Color.white)
+                .background(Color.fremCardBg)
             }
             .navigationTitle("AI Advisor")
             .navigationBarTitleDisplayMode(.inline)
@@ -91,7 +91,7 @@ struct AIChatView: View {
                         viewModel.clearChat()
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                     }
                     .disabled(viewModel.messages.isEmpty)
                 }
@@ -108,10 +108,10 @@ struct AIChatView: View {
                 .foregroundColor(.purple)
             Text("FREM AI Financial Advisor")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.fremSlate900)
+                .foregroundColor(.fremTextPrimary)
             Text("Ask me anything about your finances. I can help with budgeting advice, goal planning, spending analysis, and more.")
                 .font(.system(size: 14))
-                .foregroundColor(.fremSlate500)
+                .foregroundColor(.fremTextTertiary)
                 .multilineTextAlignment(.center)
 
             // Suggestion chips
@@ -148,13 +148,21 @@ struct AIChatView: View {
             if isUser { Spacer(minLength: 60) }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
-                    .font(.system(size: 14))
-                    .foregroundColor(isUser ? .white : .fremSlate900)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(isUser ? Color.fremBlue : Color.fremSlate100)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                if isUser {
+                    Text(message.content)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.fremBlue)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                } else {
+                    MarkdownMessageView(content: message.content)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.fremSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                }
             }
 
             if !isUser { Spacer(minLength: 60) }

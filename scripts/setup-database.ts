@@ -104,6 +104,8 @@ const createTableStatements = [
       notifications_enabled INTEGER DEFAULT 1,
       dark_mode INTEGER DEFAULT 0,
       weekly_summary_email INTEGER DEFAULT 1,
+      bank_reserve_amount REAL DEFAULT 0,
+      bank_reserve_type TEXT DEFAULT 'amount',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -529,6 +531,23 @@ async function setup() {
       console.log(`   ✅ ${cat.name}`)
     } catch (error) {
       console.error(`   ❌ ${cat.name}:`, error)
+    }
+  }
+
+  // Migrations for existing databases
+  console.log('\n🔄 Running migrations...\n')
+
+  const migrations = [
+    { col: 'bank_reserve_amount', sql: `ALTER TABLE user_settings ADD COLUMN bank_reserve_amount REAL DEFAULT 0` },
+    { col: 'bank_reserve_type', sql: `ALTER TABLE user_settings ADD COLUMN bank_reserve_type TEXT DEFAULT 'amount'` },
+  ]
+
+  for (const m of migrations) {
+    try {
+      await db.execute({ sql: m.sql, args: [] })
+      console.log(`   ✅ Added ${m.col}`)
+    } catch {
+      // Column already exists
     }
   }
 

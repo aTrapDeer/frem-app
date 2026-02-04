@@ -16,11 +16,11 @@ struct LoginView: View {
 
                 Text("Forward your finances")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(.fremSlate600)
+                    .foregroundColor(.fremTextSecondary)
 
-                Text("Track → Visualize → Optimize your money")
+                Text("Track \u{2192} Visualize \u{2192} Optimize your money")
                     .font(.system(size: 14))
-                    .foregroundColor(.fremSlate500)
+                    .foregroundColor(.fremTextTertiary)
             }
 
             Spacer()
@@ -64,13 +64,13 @@ struct LoginView: View {
 
                 Text("By signing in, you agree to our Terms of Service and Privacy Policy")
                     .font(.system(size: 11))
-                    .foregroundColor(.fremSlate500)
+                    .foregroundColor(.fremTextTertiary)
                     .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 32)
             .padding(.bottom, 40)
         }
-        .background(Color.white)
+        .background(Color.fremBackground)
     }
 
     private func featureRow(icon: String, title: String, subtitle: String) -> some View {
@@ -85,10 +85,10 @@ struct LoginView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.fremSlate900)
+                    .foregroundColor(.fremTextPrimary)
                 Text(subtitle)
                     .font(.system(size: 13))
-                    .foregroundColor(.fremSlate500)
+                    .foregroundColor(.fremTextTertiary)
             }
             Spacer()
         }

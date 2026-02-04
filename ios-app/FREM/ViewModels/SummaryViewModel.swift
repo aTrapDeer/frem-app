@@ -2,7 +2,7 @@ import Foundation
 
 @Observable
 class SummaryViewModel {
-    var summary: SummaryData?
+    var summary: SummaryResponse?
     var milestones: [FinancialMilestone] = []
     var aiReport: String?
     var isLoading = true
@@ -13,14 +13,11 @@ class SummaryViewModel {
         await MainActor.run { isLoading = true; error = nil }
 
         do {
-            async let summaryTask = APIService.shared.fetchSummary()
-            async let milestonesTask = APIService.shared.fetchMilestones()
-
-            let (sum, miles) = try await (summaryTask, milestonesTask)
+            let response = try await APIService.shared.fetchSummary()
 
             await MainActor.run {
-                self.summary = sum
-                self.milestones = miles
+                self.summary = response
+                self.milestones = response.milestones ?? []
                 self.isLoading = false
             }
         } catch {

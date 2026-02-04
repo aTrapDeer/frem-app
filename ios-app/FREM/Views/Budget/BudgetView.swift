@@ -15,7 +15,7 @@ struct BudgetView: View {
                             .foregroundColor(.fremGreen)
                         Text("Income")
                             .font(.system(size: 11))
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                     }
 
                     VStack(spacing: 2) {
@@ -24,7 +24,7 @@ struct BudgetView: View {
                             .foregroundColor(.fremRed)
                         Text("Expenses")
                             .font(.system(size: 11))
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                     }
 
                     VStack(spacing: 2) {
@@ -33,12 +33,12 @@ struct BudgetView: View {
                             .foregroundColor(viewModel.monthlySurplus >= 0 ? .fremBlue : .fremRed)
                         Text("Surplus")
                             .font(.system(size: 11))
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.white)
+                .background(Color.fremCardBg)
 
                 // Segment picker
                 Picker("Section", selection: $selectedTab) {
@@ -68,7 +68,7 @@ struct BudgetView: View {
                     .padding()
                 }
             }
-            .background(Color.fremSlate50)
+            .background(Color.fremBackground)
             .navigationTitle("Budget")
             .refreshable {
                 await viewModel.loadData()
@@ -100,7 +100,7 @@ struct BudgetView: View {
                     HStack(spacing: 6) {
                         Text(source.name)
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.fremSlate900)
+                            .foregroundColor(.fremTextPrimary)
                         if source.isPrimary {
                             Text("Primary")
                                 .font(.system(size: 10, weight: .medium))
@@ -113,15 +113,15 @@ struct BudgetView: View {
                     }
                     Text("\(source.incomeType.displayName) - \(source.payFrequency.displayName)")
                         .font(.system(size: 12))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                 }
                 Spacer()
                 Text(source.status.rawValue.capitalized)
                     .font(.system(size: 11, weight: .medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(source.status == .active ? Color.fremGreen.opacity(0.1) : Color.fremSlate100)
-                    .foregroundColor(source.status == .active ? .fremGreen : .fremSlate500)
+                    .background(source.status == .active ? Color.fremGreen.opacity(0.1) : Color.fremSurfaceAlt)
+                    .foregroundColor(source.status == .active ? .fremGreen : .fremTextTertiary)
                     .clipShape(Capsule())
             }
 
@@ -130,15 +130,15 @@ struct BudgetView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Low")
                         .font(.system(size: 10))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                     Text(source.estimatedMonthlyLow.asCurrency)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.fremSlate600)
+                        .foregroundColor(.fremTextSecondary)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Mid")
                         .font(.system(size: 10))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                     Text(source.estimatedMonthlyMid.asCurrency)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.fremGreen)
@@ -146,10 +146,10 @@ struct BudgetView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("High")
                         .font(.system(size: 10))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                     Text(source.estimatedMonthlyHigh.asCurrency)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.fremSlate600)
+                        .foregroundColor(.fremTextSecondary)
                 }
             }
 
@@ -157,11 +157,11 @@ struct BudgetView: View {
             if let start = source.startDate, let end = source.endDate {
                 HStack {
                     Label(start.asShortDate, systemImage: "calendar")
-                    Text("→")
+                    Text("\u{2192}")
                     Text(end.asShortDate)
                 }
                 .font(.system(size: 11))
-                .foregroundColor(.fremSlate500)
+                .foregroundColor(.fremTextTertiary)
             }
         }
         .padding()
@@ -187,7 +187,7 @@ struct BudgetView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(expense.name)
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.fremSlate900)
+                                .foregroundColor(.fremTextPrimary)
                             HStack(spacing: 8) {
                                 Text("Due: \(ordinal(expense.dueDate))")
                                 if expense.autoPay {
@@ -195,7 +195,7 @@ struct BudgetView: View {
                                 }
                             }
                             .font(.system(size: 12))
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                         }
 
                         Spacer()
@@ -212,14 +212,14 @@ struct BudgetView: View {
                 HStack {
                     Text("Total Monthly")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.fremSlate900)
+                        .foregroundColor(.fremTextPrimary)
                     Spacer()
                     Text(viewModel.totalMonthlyExpenses.asCurrency)
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.fremRed)
                 }
                 .padding()
-                .background(Color.fremSlate100)
+                .background(Color.fremSurfaceAlt)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
@@ -237,14 +237,14 @@ struct BudgetView: View {
                         HStack {
                             Text(project.name)
                                 .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.fremSlate900)
+                                .foregroundColor(.fremTextPrimary)
                             Spacer()
                             Text(project.status.displayName)
                                 .font(.system(size: 11, weight: .medium))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
-                                .background(project.status == .active ? Color.fremGreen.opacity(0.1) : Color.fremSlate100)
-                                .foregroundColor(project.status == .active ? .fremGreen : .fremSlate500)
+                                .background(project.status == .active ? Color.fremGreen.opacity(0.1) : Color.fremSurfaceAlt)
+                                .foregroundColor(project.status == .active ? .fremGreen : .fremTextTertiary)
                                 .clipShape(Capsule())
                         }
 
@@ -252,7 +252,7 @@ struct BudgetView: View {
                             VStack(alignment: .leading) {
                                 Text("Current")
                                     .font(.system(size: 11))
-                                    .foregroundColor(.fremSlate500)
+                                    .foregroundColor(.fremTextTertiary)
                                 Text(project.currentMonthlyEarnings.asCurrency)
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundColor(.fremGreen)
@@ -260,7 +260,7 @@ struct BudgetView: View {
                             VStack(alignment: .leading) {
                                 Text("Projected")
                                     .font(.system(size: 11))
-                                    .foregroundColor(.fremSlate500)
+                                    .foregroundColor(.fremTextTertiary)
                                 Text(project.projectedMonthlyEarnings.asCurrency)
                                     .font(.system(size: 14, weight: .medium))
                                     .foregroundColor(.fremBlue)
@@ -268,10 +268,10 @@ struct BudgetView: View {
                             VStack(alignment: .leading) {
                                 Text("Hours/wk")
                                     .font(.system(size: 11))
-                                    .foregroundColor(.fremSlate500)
+                                    .foregroundColor(.fremTextTertiary)
                                 Text("\(String(format: "%.0f", project.timeInvestedWeekly))h")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.fremSlate900)
+                                    .foregroundColor(.fremTextPrimary)
                             }
                         }
                     }
@@ -288,10 +288,10 @@ struct BudgetView: View {
         VStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 36))
-                .foregroundColor(.fremSlate200)
+                .foregroundColor(.fremPlaceholder)
             Text(message)
                 .font(.system(size: 14))
-                .foregroundColor(.fremSlate500)
+                .foregroundColor(.fremTextTertiary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)

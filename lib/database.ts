@@ -102,6 +102,8 @@ export type UserSettings = {
   notifications_enabled: boolean
   dark_mode: boolean
   weekly_summary_email: boolean
+  bank_reserve_amount: number
+  bank_reserve_type: 'amount' | 'percentage'
   created_at: string
   updated_at: string
 }
@@ -234,6 +236,8 @@ function rowToUserSettings(row: Record<string, unknown>): UserSettings {
     notifications_enabled: Boolean(row.notifications_enabled),
     dark_mode: Boolean(row.dark_mode),
     weekly_summary_email: Boolean(row.weekly_summary_email),
+    bank_reserve_amount: (row.bank_reserve_amount as number) ?? 0,
+    bank_reserve_type: (row.bank_reserve_type as string ?? 'amount') as 'amount' | 'percentage',
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
   }
@@ -274,7 +278,15 @@ export const updateUserSettings = async (userId: string, updates: Partial<UserSe
     fields.push('dark_mode = ?')
     args.push(updates.dark_mode ? 1 : 0)
   }
-  
+  if (updates.bank_reserve_amount !== undefined) {
+    fields.push('bank_reserve_amount = ?')
+    args.push(updates.bank_reserve_amount)
+  }
+  if (updates.bank_reserve_type !== undefined) {
+    fields.push('bank_reserve_type = ?')
+    args.push(updates.bank_reserve_type)
+  }
+
   args.push(userId)
   
   await db.execute({
@@ -1188,6 +1200,7 @@ export interface GoalProjection {
   daysAheadOrBehind: number // Positive = ahead of schedule
   status: 'on_track' | 'ahead' | 'behind' | 'at_risk' | 'completed'
   category: string
+  suggestedDeadline?: string
 }
 
 export interface ProjectionSummary {
@@ -1196,6 +1209,7 @@ export interface ProjectionSummary {
   totalMonthlyExpenses: number
   monthlySurplus: number
   surplusAllocatedToGoals: number
+  bankReserve: number
   hasVariableIncome: boolean
   oneTimeNet?: number
   // Scenarios for variable income
@@ -1209,12 +1223,13 @@ export interface ProjectionSummary {
 export const calculateGoalProjections = async (userId: string): Promise<ProjectionSummary> => {
   try {
     // Get all required data
-    const [goals, recurringExpenses, incomeSources, sideProjects, monthlyTransactions] = await Promise.all([
+    const [goals, recurringExpenses, incomeSources, sideProjects, monthlyTransactions, userSettings] = await Promise.all([
       getGoals(userId),
       getRecurringExpenses(userId),
       getIncomeSources(userId).catch(() => []),
       getSideProjects(userId),
-      getTransactionsForMonth(userId)
+      getTransactionsForMonth(userId),
+      getUserSettings(userId)
     ])
     
     const activeGoals = goals.filter(g => g.status === 'active')
@@ -1251,7 +1266,23 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     const surplusLow = Math.max(0, monthlyIncomeLow - monthlyExpenses)
     const surplusMid = Math.max(0, monthlyIncomeMid - monthlyExpenses)
     const surplusHigh = Math.max(0, monthlyIncomeHigh - monthlyExpenses)
-    
+
+    // Compute bank reserve from user settings
+    const computeReserve = (surplus: number): number => {
+      if (!userSettings) return 0
+      const { bank_reserve_amount, bank_reserve_type } = userSettings
+      if (bank_reserve_type === 'percentage') {
+        return Math.min(surplus, surplus * (bank_reserve_amount / 100))
+      }
+      return Math.min(surplus, bank_reserve_amount)
+    }
+    const reserveLow = computeReserve(surplusLow)
+    const reserveMid = computeReserve(surplusMid)
+    const reserveHigh = computeReserve(surplusHigh)
+    const allocatableLow = Math.max(0, surplusLow - reserveLow)
+    const allocatableMid = Math.max(0, surplusMid - reserveMid)
+    const allocatableHigh = Math.max(0, surplusHigh - reserveHigh)
+
     const getMonthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1)
     const addMonths = (date: Date, months: number) => new Date(date.getFullYear(), date.getMonth() + months, 1)
     const diffMonths = (start: Date, end: Date) => {
@@ -1401,6 +1432,21 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
           status = 'at_risk'
         }
 
+        // Suggest a realistic deadline for behind/at_risk goals
+        let suggestedDeadline: string | undefined
+        if ((status === 'behind' || status === 'at_risk') && monthlyAllocation > 0) {
+          const monthsNeeded = estimateMonthsToComplete(
+            state.goal.current_amount,
+            state.goal.target_amount,
+            monthlyAllocation,
+            state.goal.interest_rate
+          )
+          if (monthsNeeded !== Infinity && monthsNeeded > 0) {
+            const suggested = addMonths(startOfMonth, Math.ceil(monthsNeeded) + 1)
+            suggestedDeadline = suggested.toISOString().split('T')[0]
+          }
+        }
+
         return {
           goalId: state.goal.id,
           title: state.goal.title,
@@ -1417,30 +1463,32 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
           isOnTrack,
           daysAheadOrBehind,
           status,
-          category: state.goal.category
+          category: state.goal.category,
+          suggestedDeadline
         }
       })
     }
     
-    // Calculate projections for expected (mid) surplus
-    const goalProjections = calculateProjectionsForSurplus(surplusMid)
-    
+    // Calculate projections for expected (mid) allocatable surplus
+    const goalProjections = calculateProjectionsForSurplus(allocatableMid)
+
     const result: ProjectionSummary = {
       goals: goalProjections,
       totalMonthlyIncome: Math.round(monthlyIncomeMid * 100) / 100,
       totalMonthlyExpenses: Math.round(monthlyExpenses * 100) / 100,
       monthlySurplus: Math.round(surplusMid * 100) / 100,
-      surplusAllocatedToGoals: Math.round(surplusMid * 100) / 100,
+      surplusAllocatedToGoals: Math.round(allocatableMid * 100) / 100,
+      bankReserve: Math.round(reserveMid * 100) / 100,
       hasVariableIncome,
       oneTimeNet: Math.round(oneTimeNet * 100) / 100
     }
-    
+
     // Add scenarios if variable income
     if (hasVariableIncome) {
       result.scenarios = {
-        conservative: calculateProjectionsForSurplus(surplusLow),
+        conservative: calculateProjectionsForSurplus(allocatableLow),
         expected: goalProjections,
-        optimistic: calculateProjectionsForSurplus(surplusHigh)
+        optimistic: calculateProjectionsForSurplus(allocatableHigh)
       }
     }
     
@@ -1453,6 +1501,7 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
       totalMonthlyExpenses: 0,
       monthlySurplus: 0,
       surplusAllocatedToGoals: 0,
+      bankReserve: 0,
       hasVariableIncome: false
     }
   }

@@ -21,7 +21,12 @@ class ChatViewModel {
         }
 
         do {
-            let response = try await APIService.shared.sendAIChatMessage(messages: messages)
+            // Server expects {message: string, conversationHistory: [{role, content}]}
+            let history = Array(messages.dropLast())
+            let response = try await APIService.shared.sendAIChatMessage(
+                message: text,
+                conversationHistory: history
+            )
 
             let assistantMessage = AIChatMessage(role: "assistant", content: response.text)
 

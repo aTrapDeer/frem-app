@@ -20,7 +20,7 @@ struct DailyView: View {
                 }
                 .padding()
             }
-            .background(Color.fremSlate50)
+            .background(Color.fremBackground)
             .navigationTitle("Today")
             .refreshable {
                 await viewModel.loadData()
@@ -43,10 +43,10 @@ struct DailyView: View {
                         .foregroundColor(.fremBlue)
                     Text(viewModel.dailyTotal.asCurrencyWithCents)
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.fremSlate900)
+                        .foregroundColor(.fremTextPrimary)
                     Text("Today's Total")
                         .font(.system(size: 13))
-                        .foregroundColor(.fremSlate600)
+                        .foregroundColor(.fremTextSecondary)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -57,10 +57,10 @@ struct DailyView: View {
                         .foregroundColor(viewModel.isOnTrack ? .fremGreen : .orange)
                     Text(viewModel.dailyTarget.asCurrencyWithCents)
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.fremSlate900)
+                        .foregroundColor(.fremTextPrimary)
                     Text("Daily Target")
                         .font(.system(size: 13))
-                        .foregroundColor(.fremSlate600)
+                        .foregroundColor(.fremTextSecondary)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -74,7 +74,7 @@ struct DailyView: View {
                         .foregroundColor(viewModel.surplus >= 0 ? .fremGreen : .fremRed)
                     Text(viewModel.surplus >= 0 ? "Surplus" : "Deficit")
                         .font(.system(size: 13))
-                        .foregroundColor(.fremSlate600)
+                        .foregroundColor(.fremTextSecondary)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -84,11 +84,11 @@ struct DailyView: View {
                 HStack {
                     Text("Progress to Goal")
                         .font(.system(size: 13))
-                        .foregroundColor(.fremSlate600)
+                        .foregroundColor(.fremTextSecondary)
                     Spacer()
                     Text("\(Int(viewModel.progressPercentage))%")
                         .font(.system(size: 13))
-                        .foregroundColor(.fremSlate600)
+                        .foregroundColor(.fremTextSecondary)
                 }
                 ProgressView(value: viewModel.progressPercentage / 100)
                     .tint(.fremBlue)
@@ -107,13 +107,13 @@ struct DailyView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Daily Target Breakdown")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.fremSlate900)
+                        .foregroundColor(.fremTextPrimary)
 
                     HStack {
                         HStack {
                             Text("Goals (\(target.activeGoalsCount)):")
                                 .font(.system(size: 13))
-                                .foregroundColor(.fremSlate600)
+                                .foregroundColor(.fremTextSecondary)
                             Spacer()
                             Text("$\(String(format: "%.2f", target.monthlyGoalObligations / 30.44))/day")
                                 .font(.system(size: 13, weight: .medium))
@@ -124,7 +124,7 @@ struct DailyView: View {
                         HStack {
                             Text("Expenses (\(target.recurringExpensesCount)):")
                                 .font(.system(size: 13))
-                                .foregroundColor(.fremSlate600)
+                                .foregroundColor(.fremTextSecondary)
                             Spacer()
                             Text("$\(String(format: "%.2f", target.monthlyRecurringTotal / 30.44))/day")
                                 .font(.system(size: 13, weight: .medium))
@@ -138,11 +138,11 @@ struct DailyView: View {
                     HStack {
                         Text("Total Daily Need:")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.fremSlate900)
+                            .foregroundColor(.fremTextPrimary)
                         Spacer()
                         Text("$\(String(format: "%.2f", target.dailyTarget))")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.fremSlate900)
+                            .foregroundColor(.fremTextPrimary)
                     }
 
                     if target.dailySurplusDeficit != 0 {
@@ -155,7 +155,7 @@ struct DailyView: View {
                     }
                 }
                 .padding()
-                .background(Color.fremSlate50)
+                .background(Color.fremSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
@@ -170,7 +170,7 @@ struct DailyView: View {
                     HStack {
                         Label("Goal Progress", systemImage: "target")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.fremSlate900)
+                            .foregroundColor(.fremTextPrimary)
 
                         if projections.hasVariableIncome {
                             Text("Variable")
@@ -191,7 +191,7 @@ struct DailyView: View {
 
                             Text(goal.title)
                                 .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.fremSlate900)
+                                .foregroundColor(.fremTextPrimary)
                                 .lineLimit(1)
 
                             Spacer()
@@ -202,18 +202,18 @@ struct DailyView: View {
 
                             Text("\(Int(goal.progressPercentage))%")
                                 .font(.system(size: 12))
-                                .foregroundColor(.fremSlate600)
+                                .foregroundColor(.fremTextSecondary)
                                 .frame(width: 40, alignment: .trailing)
                         }
                         .padding(8)
-                        .background(Color.fremSlate50)
+                        .background(Color.fremSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
 
                     if projections.monthlySurplus > 0 {
                         Text("\(projections.monthlySurplus.asCurrency)/mo allocated to goals")
                             .font(.system(size: 12))
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                             .frame(maxWidth: .infinity)
                     }
                 }
@@ -247,7 +247,7 @@ struct DailyView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     Text("Add Income")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.fremSlate900)
+                        .foregroundColor(.fremTextPrimary)
                 }
 
                 TextField("Amount", text: $viewModel.incomeAmount)
@@ -288,7 +288,7 @@ struct DailyView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     Text("Add Expense")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.fremSlate900)
+                        .foregroundColor(.fremTextPrimary)
                 }
 
                 TextField("Amount", text: $viewModel.expenseAmount)
@@ -326,16 +326,16 @@ struct DailyView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Today's Entries")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.fremSlate900)
+                .foregroundColor(.fremTextPrimary)
 
             if viewModel.transactions.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "dollarsign.circle")
                         .font(.system(size: 40))
-                        .foregroundColor(.fremSlate200)
+                        .foregroundColor(.fremPlaceholder)
                     Text("No transactions today.\nAdd your first transaction above!")
                         .font(.system(size: 14))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)

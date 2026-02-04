@@ -41,7 +41,8 @@ class APIService {
         method: String = "GET",
         body: Encodable? = nil
     ) async throws -> T {
-        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+        let base = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: "\(base)\(endpoint)") else {
             throw APIError.invalidURL
         }
 
@@ -50,10 +51,12 @@ class APIService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // Attach session token for authentication
+        // Auth.js v5 (NextAuth v5) uses "authjs.session-token" (HTTP) or "__Secure-authjs.session-token" (HTTPS).
+        // Send both cookie names so the server finds the session in dev and production.
         if let token = KeychainHelper.read(.sessionToken) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            // Also send as cookie for NextAuth compatibility
-            request.setValue("next-auth.session-token=\(token)", forHTTPHeaderField: "Cookie")
+            let cookieValue = "authjs.session-token=\(token); __Secure-authjs.session-token=\(token)"
+            request.setValue(cookieValue, forHTTPHeaderField: "Cookie")
         }
 
         if let body = body {
@@ -170,7 +173,7 @@ class APIService {
 
     // MARK: - Summary
 
-    func fetchSummary() async throws -> SummaryData {
+    func fetchSummary() async throws -> SummaryResponse {
         try await request("/api/summary")
     }
 
@@ -180,8 +183,8 @@ class APIService {
         try await request("/api/ai-report")
     }
 
-    func sendAIChatMessage(messages: [AIChatMessage]) async throws -> AIChatResponse {
-        let body = ChatRequest(messages: messages)
+    func sendAIChatMessage(message: String, conversationHistory: [AIChatMessage]) async throws -> AIChatResponse {
+        let body = ChatRequest(message: message, conversationHistory: conversationHistory)
         return try await request("/api/ai-chat", method: "POST", body: body)
     }
 
@@ -196,7 +199,8 @@ class APIService {
     }
 }
 
-// Wrapper to encode messages array
+// Wrapper matching server's expected {message, conversationHistory} format
 private struct ChatRequest: Encodable {
-    let messages: [AIChatMessage]
+    let message: String
+    let conversationHistory: [AIChatMessage]
 }

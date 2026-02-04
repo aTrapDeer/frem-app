@@ -43,6 +43,9 @@
 		A1000052 /* GoalProjectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000052 /* GoalProjectionCard.swift */; };
 		A1000053 /* TransactionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000053 /* TransactionRow.swift */; };
 		A1000054 /* ProgressRing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000054 /* ProgressRing.swift */; };
+		A1000055 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000055 /* MarkdownMessageView.swift */; };
+		A1000036 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000036 /* SettingsViewModel.swift */; };
+		A1000048 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000048 /* SettingsView.swift */; };
 		A1000060 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000060 /* Theme.swift */; };
 		A1000061 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000061 /* Extensions.swift */; };
 		A1000062 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000062 /* Constants.swift */; };
@@ -71,6 +74,7 @@
 		B1000033 /* BudgetViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetViewModel.swift; sourceTree = "<group>"; };
 		B1000034 /* SummaryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryViewModel.swift; sourceTree = "<group>"; };
 		B1000035 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		B1000036 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		B1000040 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		B1000041 /* DailyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyView.swift; sourceTree = "<group>"; };
 		B1000042 /* GoalsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoalsView.swift; sourceTree = "<group>"; };
@@ -79,11 +83,13 @@
 		B1000045 /* SummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryView.swift; sourceTree = "<group>"; };
 		B1000046 /* AIChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIChatView.swift; sourceTree = "<group>"; };
 		B1000047 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		B1000048 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B1000050 /* FREMCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FREMCard.swift; sourceTree = "<group>"; };
 		B1000051 /* KPICard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KPICard.swift; sourceTree = "<group>"; };
 		B1000052 /* GoalProjectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoalProjectionCard.swift; sourceTree = "<group>"; };
 		B1000053 /* TransactionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionRow.swift; sourceTree = "<group>"; };
 		B1000054 /* ProgressRing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressRing.swift; sourceTree = "<group>"; };
+		B1000055 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
 		B1000060 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B1000061 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
 		B1000062 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
@@ -163,6 +169,7 @@
 				B1000033 /* BudgetViewModel.swift */,
 				B1000034 /* SummaryViewModel.swift */,
 				B1000035 /* ChatViewModel.swift */,
+				B1000036 /* SettingsViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -177,6 +184,7 @@
 				E1000045 /* Summary */,
 				E1000046 /* Chat */,
 				E1000047 /* Auth */,
+				E1000048 /* Settings */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -238,6 +246,14 @@
 			path = Auth;
 			sourceTree = "<group>";
 		};
+		E1000048 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				B1000048 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
 		E1000050 /* Components */ = {
 			isa = PBXGroup;
 			children = (
@@ -246,6 +262,7 @@
 				B1000052 /* GoalProjectionCard.swift */,
 				B1000053 /* TransactionRow.swift */,
 				B1000054 /* ProgressRing.swift */,
+				B1000055 /* MarkdownMessageView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -360,6 +377,7 @@
 				A1000033 /* BudgetViewModel.swift in Sources */,
 				A1000034 /* SummaryViewModel.swift in Sources */,
 				A1000035 /* ChatViewModel.swift in Sources */,
+				A1000036 /* SettingsViewModel.swift in Sources */,
 				A1000040 /* DashboardView.swift in Sources */,
 				A1000041 /* DailyView.swift in Sources */,
 				A1000042 /* GoalsView.swift in Sources */,
@@ -368,11 +386,13 @@
 				A1000045 /* SummaryView.swift in Sources */,
 				A1000046 /* AIChatView.swift in Sources */,
 				A1000047 /* LoginView.swift in Sources */,
+				A1000048 /* SettingsView.swift in Sources */,
 				A1000050 /* FREMCard.swift in Sources */,
 				A1000051 /* KPICard.swift in Sources */,
 				A1000052 /* GoalProjectionCard.swift in Sources */,
 				A1000053 /* TransactionRow.swift in Sources */,
 				A1000054 /* ProgressRing.swift in Sources */,
+				A1000055 /* MarkdownMessageView.swift in Sources */,
 				A1000060 /* Theme.swift in Sources */,
 				A1000061 /* Extensions.swift in Sources */,
 				A1000062 /* Constants.swift in Sources */,

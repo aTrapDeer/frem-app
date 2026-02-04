@@ -14,12 +14,13 @@ struct GoalsView: View {
                         emptyState
                     } else {
                         projectionSummary
+                        allocationBreakdown
                         goalsList
                     }
                 }
                 .padding()
             }
-            .background(Color.fremSlate50)
+            .background(Color.fremBackground)
             .navigationTitle("Goals")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -49,13 +50,13 @@ struct GoalsView: View {
         VStack(spacing: 16) {
             Image(systemName: "target")
                 .font(.system(size: 48))
-                .foregroundColor(.fremSlate200)
+                .foregroundColor(.fremPlaceholder)
             Text("No goals yet")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.fremSlate900)
+                .foregroundColor(.fremTextPrimary)
             Text("Set financial goals and track your progress toward achieving them.")
                 .font(.system(size: 14))
-                .foregroundColor(.fremSlate500)
+                .foregroundColor(.fremTextTertiary)
                 .multilineTextAlignment(.center)
             Button {
                 viewModel.showingCreateForm = true
@@ -88,7 +89,7 @@ struct GoalsView: View {
                             .foregroundColor(.fremGreen)
                         Text("Monthly Income")
                             .font(.system(size: 11))
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                     }
                     .frame(maxWidth: .infinity)
 
@@ -98,7 +99,7 @@ struct GoalsView: View {
                             .foregroundColor(.fremRed)
                         Text("Monthly Expenses")
                             .font(.system(size: 11))
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                     }
                     .frame(maxWidth: .infinity)
 
@@ -108,12 +109,63 @@ struct GoalsView: View {
                             .foregroundColor(projections.monthlySurplus >= 0 ? .fremBlue : .fremRed)
                         Text("Surplus")
                             .font(.system(size: 11))
-                            .foregroundColor(.fremSlate500)
+                            .foregroundColor(.fremTextTertiary)
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .padding()
                 .fremCard()
+            }
+        }
+    }
+
+    // MARK: - Allocation Breakdown
+
+    private var allocationBreakdown: some View {
+        Group {
+            if let projections = viewModel.projections {
+                let totalAllocated = projections.goals.reduce(0.0) { $0 + $1.monthlyAllocation }
+
+                if totalAllocated > 0 || (projections.bankReserve ?? 0) > 0 {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Surplus Allocation")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.fremTextPrimary)
+                            Spacer()
+                            if let reserve = projections.bankReserve, reserve > 0 {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "banknote")
+                                        .font(.system(size: 11))
+                                    Text("Reserve: \(reserve.asCurrency)")
+                                        .font(.system(size: 12))
+                                }
+                                .foregroundColor(.fremAmber)
+                            }
+                        }
+
+                        ForEach(projections.goals) { goal in
+                            if goal.monthlyAllocation > 0 {
+                                HStack {
+                                    Text(goal.title)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.fremTextPrimary)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text(goal.monthlyAllocation.asCurrency)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.fremBlue)
+                                    Text("(\(Int(totalAllocated > 0 ? (goal.monthlyAllocation / totalAllocated) * 100 : 0))%)")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.fremTextTertiary)
+                                        .frame(width: 40, alignment: .trailing)
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .fremCard()
+                }
             }
         }
     }
@@ -140,7 +192,7 @@ struct GoalsView: View {
 
                 Text(goal.title)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.fremSlate900)
+                    .foregroundColor(.fremTextPrimary)
 
                 Spacer()
 
@@ -158,11 +210,11 @@ struct GoalsView: View {
                 HStack {
                     Text(goal.currentAmount.asCurrency)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.fremSlate900)
+                        .foregroundColor(.fremTextPrimary)
                     Spacer()
                     Text(goal.targetAmount.asCurrency)
                         .font(.system(size: 13))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                 }
 
                 ProgressView(value: min(goal.progressPercentage / 100, 1.0))
@@ -171,24 +223,29 @@ struct GoalsView: View {
                 HStack {
                     Text("\(Int(goal.progressPercentage))% complete")
                         .font(.system(size: 12))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                     Spacer()
                     Text("Due: \(goal.deadline.asFormattedDate)")
                         .font(.system(size: 12))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
                 }
             }
 
             // Projection info
             if let projection = projection {
+                let display = goalDisplayStatus(
+                    projectionStatus: projection.status,
+                    actualProgress: goal.progressPercentage
+                )
+
                 HStack {
                     HStack(spacing: 4) {
-                        Image(systemName: projection.statusConfig.iconName)
+                        Image(systemName: display.iconName)
                             .font(.system(size: 12))
-                        Text(projection.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+                        Text(display.label)
                             .font(.system(size: 12, weight: .medium))
                     }
-                    .foregroundColor(statusColor(for: projection.status))
+                    .foregroundColor(display.color)
 
                     Spacer()
 
@@ -200,7 +257,19 @@ struct GoalsView: View {
 
                     Text("Est. \(projection.projectedCompletionDate.asShortDate)")
                         .font(.system(size: 12))
-                        .foregroundColor(.fremSlate500)
+                        .foregroundColor(.fremTextTertiary)
+                }
+
+                // Timeline suggestion for behind/at_risk goals
+                if let suggested = projection.suggestedDeadline,
+                   (projection.status == .behind || projection.status == .atRisk) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.system(size: 11))
+                        Text("Suggested deadline: \(suggested.asFormattedDate)")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundColor(.fremAmber)
                 }
             }
         }
@@ -216,12 +285,27 @@ struct GoalsView: View {
         }
     }
 
-    private func statusColor(for status: ProjectionStatus) -> Color {
-        switch status {
-        case .completed, .onTrack: return .fremGreen
-        case .ahead: return .fremBlue
-        case .behind: return .fremAmber
-        case .atRisk: return .fremRed
+    private func goalDisplayStatus(
+        projectionStatus: ProjectionStatus,
+        actualProgress: Double
+    ) -> (label: String, iconName: String, color: Color) {
+        // Actually completed — current amount meets or exceeds target
+        if actualProgress >= 100 {
+            return ("Completed", "checkmark.circle.fill", .fremGreen)
+        }
+
+        switch projectionStatus {
+        case .completed:
+            // Projected to complete, but not there yet
+            return ("On Pace", "arrow.up.forward", .fremEmerald)
+        case .onTrack:
+            return ("On Track", "checkmark.circle.fill", .fremGreen)
+        case .ahead:
+            return ("Ahead", "arrow.up.right", .fremBlue)
+        case .behind:
+            return ("Behind", "clock.fill", .fremAmber)
+        case .atRisk:
+            return ("At Risk", "exclamationmark.triangle.fill", .fremRed)
         }
     }
 }

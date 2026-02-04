@@ -30,12 +30,12 @@ struct GoalProjectionCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(projection.title)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.fremSlate900)
+                    .foregroundColor(.fremTextPrimary)
                     .lineLimit(1)
 
                 Text("\(projection.totalProjectedProgress.asCurrency) / \(projection.targetAmount.asCurrency)")
                     .font(.system(size: 12))
-                    .foregroundColor(.fremSlate500)
+                    .foregroundColor(.fremTextTertiary)
             }
 
             Spacer()
@@ -52,15 +52,15 @@ struct GoalProjectionCard: View {
                     Text(projection.projectedCompletionDate.asShortDate)
                         .font(.system(size: 11))
                 }
-                .foregroundColor(.fremSlate500)
+                .foregroundColor(.fremTextTertiary)
             }
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color.fremCardBg)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.fremSlate100, lineWidth: 1)
+                .stroke(Color.fremBorder, lineWidth: 1)
         )
     }
 }
