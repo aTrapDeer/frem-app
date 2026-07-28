@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -39,10 +40,14 @@ interface Connection {
   provider: 'plaid' | 'mercury'
   institutionName: string
   entity: Entity
+  /** True when this login holds both personal and business accounts. */
+  entityMixed?: boolean
   entityLabel: string | null
   status: 'active' | 'reauth_required' | 'error' | 'disconnected'
   statusDetail: string | null
   lastSyncedAt: string | null
+  transactionCount: number
+  earliestTransaction: string | null
   accounts: LinkedAccount[]
 }
 
@@ -385,14 +390,21 @@ export function BankConnections() {
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="font-semibold text-slate-900">{connection.institutionName}</h4>
+                          {/* One login can hold both; labelling the whole
+                              institution with one entity would be wrong */}
                           <span
                             className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                              connection.entity === 'business'
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'bg-blue-100 text-blue-700'
+                              connection.entityMixed
+                                ? 'bg-slate-100 text-slate-600'
+                                : connection.entity === 'business'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'bg-blue-100 text-blue-700'
                             }`}
                           >
-                            {connection.entityLabel || (connection.entity === 'business' ? 'Business' : 'Personal')}
+                            {connection.entityMixed
+                              ? 'Personal + Business'
+                              : connection.entityLabel ||
+                                (connection.entity === 'business' ? 'Business' : 'Personal')}
                           </span>
                           {connection.status !== 'active' && (
                             <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
@@ -402,6 +414,15 @@ export function BankConnections() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
                           {formatSyncedAt(connection.lastSyncedAt)}
+                          {connection.transactionCount > 0 && (
+                            <>
+                              {' · '}
+                              <Link href="/ledger" className="text-blue-600 hover:text-blue-700">
+                                {connection.transactionCount.toLocaleString()} transactions
+                              </Link>
+                              {connection.earliestTransaction ? ` since ${connection.earliestTransaction}` : ''}
+                            </>
+                          )}
                           {connection.statusDetail ? ` · ${connection.statusDetail}` : ''}
                         </p>
                       </div>

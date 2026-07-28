@@ -20,6 +20,19 @@ import {
 const PLAID_PRODUCTS: Products[] = [Products.Transactions]
 const PLAID_COUNTRY_CODES: CountryCode[] = [CountryCode.Us]
 
+/**
+ * How much transaction history to request, in days. 730 is Plaid's maximum.
+ *
+ * This matters more than it looks: Plaid defaults to 90 days, and an Item's
+ * history length CANNOT be extended after creation — the only way to get more
+ * is to delete the Item and re-link, which costs the user another credential
+ * entry and burns an Item against the plan limit.
+ *
+ * Two years is the right ask here. Mortgage underwriting averages two years of
+ * income, and tax work needs prior-year figures to compare against.
+ */
+const TRANSACTION_HISTORY_DAYS = 730
+
 let client: PlaidApi | null = null
 
 /** Defaults to sandbox: reaching production must be a deliberate choice. */
@@ -87,13 +100,33 @@ export function isPlaidConfigured(): boolean {
 /**
  * Creates a short-lived token used to open Plaid Link in the browser.
  */
+/**
+ * Public URL Plaid should call when an Item has new data.
+ *
+ * Returns undefined for localhost: Plaid cannot reach it, and sending an
+ * unreachable webhook just produces delivery failures. Local development falls
+ * back to the manual sync button.
+ */
+function getWebhookUrl(): string | undefined {
+  const base = process.env.PLAID_WEBHOOK_URL || process.env.NEXTAUTH_URL
+
+  if (!base) return undefined
+  if (base.includes('localhost') || base.includes('127.0.0.1')) return undefined
+
+  return `${base.replace(/\/$/, '')}/api/plaid/webhook`
+}
+
 export async function createLinkToken(userId: string): Promise<string> {
+  const webhook = getWebhookUrl()
+
   const response = await getPlaidClient().linkTokenCreate({
     user: { client_user_id: userId },
     client_name: 'FREM',
     products: PLAID_PRODUCTS,
     country_codes: PLAID_COUNTRY_CODES,
     language: 'en',
+    transactions: { days_requested: TRANSACTION_HISTORY_DAYS },
+    ...(webhook ? { webhook } : {}),
   })
 
   return response.data.link_token

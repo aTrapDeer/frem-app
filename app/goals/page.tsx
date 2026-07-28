@@ -277,6 +277,34 @@ export default function GoalsPage() {
     }
   }
 
+  const handleCompleteGoal = async (goalId: string) => {
+    if (!user) return
+
+    try {
+      const response = await fetch('/api/goals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        // The server stamps completed_at when status becomes 'completed'
+        body: JSON.stringify({ id: goalId, status: 'completed' })
+      })
+
+      if (response.ok) {
+        // Completed goals leave the active list and stop consuming surplus,
+        // which frees that money for the remaining goals
+        setGoals(prev => prev.filter(goal => goal.id !== goalId))
+
+        const projectionsRes = await fetch('/api/projections')
+        if (projectionsRes.ok) {
+          setProjections(await projectionsRes.json())
+        }
+        setSuccessMessage("Goal completed! Its share of your surplus now goes to your other goals.")
+        setTimeout(() => setSuccessMessage(""), 6000)
+      }
+    } catch (error) {
+      console.error('Error completing goal:', error)
+    }
+  }
+
   const handleDeleteGoal = async (goalId: string) => {
     if (!user || !confirm('Are you sure you want to delete this goal?')) return
     
@@ -432,6 +460,7 @@ export default function GoalsPage() {
                     index={index}
                     onEdit={setEditingGoal}
                     onDelete={handleDeleteGoal}
+                    onComplete={handleCompleteGoal}
                     onUrgencyChange={handleQuickUrgencyUpdate}
                   />
                 ))
@@ -546,10 +575,11 @@ interface GoalCardProps {
   index: number
   onEdit: (goal: Goal) => void
   onDelete: (goalId: string) => void
+  onComplete: (goalId: string) => void
   onUrgencyChange: (goalId: string, newScore: number) => void
 }
 
-function GoalCard({ goal, projection, index, onEdit, onDelete, onUrgencyChange }: GoalCardProps) {
+function GoalCard({ goal, projection, index, onEdit, onDelete, onComplete, onUrgencyChange }: GoalCardProps) {
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [breakdown, setBreakdown] = useState<GoalBreakdown | null>(null)
   const [loadingBreakdown, setLoadingBreakdown] = useState(false)
@@ -643,6 +673,17 @@ function GoalCard({ goal, projection, index, onEdit, onDelete, onUrgencyChange }
                       title="Edit goal"
                     >
                       <Edit className="h-4 w-4 text-slate-600" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Mark "${goal.title}" as complete? Its share of your monthly surplus will move to your other goals.`)) {
+                          onComplete(goal.id)
+                        }
+                      }}
+                      className="p-2 rounded-lg hover:bg-emerald-50 transition-colors"
+                      title="Mark complete"
+                    >
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                     </button>
                     <button
                       onClick={() => onDelete(goal.id)}

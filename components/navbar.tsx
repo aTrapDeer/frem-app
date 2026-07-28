@@ -82,6 +82,12 @@ export function Navbar() {
                   Budget
                 </Link>
                 <Link
+                  href="/ledger"
+                  className="text-sm text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
+                >
+                  Ledger
+                </Link>
+                <Link
                   href="/accounts"
                   className="text-sm text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
                 >
@@ -215,6 +221,13 @@ export function Navbar() {
                     onClick={() => setIsOpen(false)}
                   >
                     Budget
+                  </Link>
+                  <Link
+                    href="/ledger"
+                    className="block text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Ledger
                   </Link>
                   <Link
                     href="/accounts"

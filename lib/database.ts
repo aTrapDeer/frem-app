@@ -43,6 +43,9 @@ export type Goal = {
   priority: 'low' | 'medium' | 'high'
   urgency_score: number // 1-5, higher = more urgent, affects surplus allocation
   status: 'active' | 'completed' | 'paused' | 'cancelled'
+  // Business surplus cannot fund a personal goal directly, so goals are scoped
+  entity: 'personal' | 'business'
+  entity_label: string | null
   created_at: string
   updated_at: string
   completed_at: string | null
@@ -71,6 +74,8 @@ export type RecurringExpense = {
   status: 'active' | 'paused' | 'cancelled'
   auto_pay: boolean
   reminder_enabled: boolean
+  entity: 'personal' | 'business'
+  entity_label: string | null
   created_at: string
   updated_at: string
 }
@@ -154,6 +159,8 @@ function rowToGoal(row: Record<string, unknown>): Goal {
     priority: row.priority as Goal['priority'],
     urgency_score: (row.urgency_score as number) || 3, // Default to 3 (medium) if not set
     status: row.status as Goal['status'],
+    entity: (row.entity as Goal['entity']) ?? 'personal',
+    entity_label: (row.entity_label as string | null) ?? null,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
     completed_at: row.completed_at as string | null,
@@ -170,6 +177,8 @@ function rowToRecurringExpense(row: Record<string, unknown>): RecurringExpense {
     category: row.category as RecurringExpense['category'],
     due_date: row.due_date as number,
     status: row.status as RecurringExpense['status'],
+    entity: (row.entity as RecurringExpense['entity']) ?? 'personal',
+    entity_label: (row.entity_label as string | null) ?? null,
     auto_pay: Boolean(row.auto_pay),
     reminder_enabled: Boolean(row.reminder_enabled),
     created_at: row.created_at as string,
@@ -1245,6 +1254,10 @@ export interface ProjectionSummary {
   bankReserve: number
   hasVariableIncome: boolean
   oneTimeNet?: number
+  /** Whether the surplus came from measured bank data or the budget. */
+  surplusBasis?: 'actual' | 'plan'
+  /** Complete months of real data behind an 'actual' basis. */
+  surplusMonthsOfData?: number
   // Scenarios for variable income
   scenarios?: {
     conservative: GoalProjection[]
@@ -1265,9 +1278,20 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
       getUserSettings(userId)
     ])
     
-    const activeGoals = goals.filter(g => g.status === 'active')
+    const allActiveGoals = goals.filter(g => g.status === 'active')
     const activeSources = incomeSources.filter(s => isIncomeSourceActive(s))
     const activeSideProjects = sideProjects.filter(p => p.status === 'active')
+
+    // Surplus is pooled per entity. Business money cannot fund a personal goal
+    // without first leaving the company as salary or a distribution, which is a
+    // taxable event -- so the two pools are allocated independently rather than
+    // summed. Side projects and one-time transactions carry no entity and are
+    // treated as personal, matching the column defaults.
+    const businessSources = activeSources.filter(s => s.entity === 'business')
+    const businessExpenses = recurringExpenses.filter(e => e.entity === 'business')
+    const businessIncomeMid = businessSources.reduce((sum, s) => sum + s.estimated_monthly_mid, 0)
+    const businessExpenseTotal = businessExpenses.reduce((sum, e) => sum + e.amount, 0)
+    const businessSurplus = Math.max(0, businessIncomeMid - businessExpenseTotal)
     
     // Calculate one-time net for the current month
     const oneTimeNet = monthlyTransactions.reduce((sum, transaction) => {
@@ -1277,9 +1301,10 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     // Calculate monthly income
     const hasVariableIncome = activeSources.some(s => s.is_commission_based)
     
-    let monthlyIncomeLow = activeSources.reduce((sum, s) => sum + s.estimated_monthly_low, 0)
-    let monthlyIncomeMid = activeSources.reduce((sum, s) => sum + s.estimated_monthly_mid, 0)
-    let monthlyIncomeHigh = activeSources.reduce((sum, s) => sum + s.estimated_monthly_high, 0)
+    const personalSources = activeSources.filter(s => s.entity !== 'business')
+    let monthlyIncomeLow = personalSources.reduce((sum, s) => sum + s.estimated_monthly_low, 0)
+    let monthlyIncomeMid = personalSources.reduce((sum, s) => sum + s.estimated_monthly_mid, 0)
+    let monthlyIncomeHigh = personalSources.reduce((sum, s) => sum + s.estimated_monthly_high, 0)
     
     // Add side project income
     const sideProjectIncome = activeSideProjects.reduce((sum, p) => sum + p.current_monthly_earnings, 0)
@@ -1293,7 +1318,9 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     monthlyIncomeHigh += oneTimeNet
     
     // Calculate monthly expenses
-    const monthlyExpenses = recurringExpenses.reduce((sum, e) => sum + e.amount, 0)
+    const monthlyExpenses = recurringExpenses
+      .filter(e => e.entity !== 'business')
+      .reduce((sum, e) => sum + e.amount, 0)
     
     // Calculate surplus for each scenario
     const surplusLow = Math.max(0, monthlyIncomeLow - monthlyExpenses)
@@ -1313,10 +1340,40 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     const reserveMid = computeReserve(surplusMid)
     const reserveHigh = computeReserve(surplusHigh)
     const allocatableLow = Math.max(0, surplusLow - reserveLow)
-    const allocatableMid = Math.max(0, surplusMid - reserveMid)
+    let allocatableMid = Math.max(0, surplusMid - reserveMid)
     const allocatableHigh = Math.max(0, surplusHigh - reserveHigh)
 
-    const calculateProjectionsForSurplus = (monthlySurplus: number): GoalProjection[] => {
+    // Prefer measured surplus over the budget once real months exist. A plan is
+    // a hypothesis; what actually cleared the account last quarter is evidence,
+    // and it predicts next quarter better. Falls back to the plan silently when
+    // no bank data is connected, so behaviour is unchanged for manual-only use.
+    // Dynamic import avoids a module cycle: ledger reads from this file.
+    let surplusBasis: 'actual' | 'plan' = 'plan'
+    let surplusMonthsOfData = 0
+    try {
+      const { getTrailingActualSurplus } = await import('./ledger')
+      const measured = await getTrailingActualSurplus(userId, { entity: 'personal' })
+
+      if (measured.basis === 'actual') {
+        surplusBasis = 'actual'
+        surplusMonthsOfData = measured.monthsOfData
+        allocatableMid = Math.max(0, measured.monthlySurplus - computeReserve(Math.max(0, measured.monthlySurplus)))
+      }
+    } catch (error) {
+      // Never let the ledger break projections that worked before it existed
+      console.error('Trailing surplus unavailable, using plan:', error)
+    }
+
+    const calculateProjectionsForSurplus = (
+      monthlySurplus: number,
+      entityFilter: 'personal' | 'business' = 'personal'
+    ): GoalProjection[] => {
+      // Only goals belonging to this entity compete for this pool
+      const activeGoals = allActiveGoals.filter(goal =>
+        entityFilter === 'business' ? goal.entity === 'business' : goal.entity !== 'business'
+      )
+      if (activeGoals.length === 0) return []
+
       const today = new Date()
       const startOfMonth = getMonthStart(today)
       const maxDeadline = activeGoals.reduce((max, goal) => {
@@ -1474,10 +1531,15 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     }
     
     // Calculate projections for expected (mid) allocatable surplus
-    const goalProjections = calculateProjectionsForSurplus(allocatableMid)
+    const goalProjections = [
+      ...calculateProjectionsForSurplus(allocatableMid, 'personal'),
+      ...calculateProjectionsForSurplus(businessSurplus, 'business'),
+    ]
 
     const result: ProjectionSummary = {
       goals: goalProjections,
+      surplusBasis,
+      surplusMonthsOfData,
       totalMonthlyIncome: toCents(monthlyIncomeMid),
       totalMonthlyExpenses: toCents(monthlyExpenses),
       monthlySurplus: toCents(surplusMid),
@@ -1490,9 +1552,9 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     // Add scenarios if variable income
     if (hasVariableIncome) {
       result.scenarios = {
-        conservative: calculateProjectionsForSurplus(allocatableLow),
+        conservative: calculateProjectionsForSurplus(allocatableLow, 'personal'),
         expected: goalProjections,
-        optimistic: calculateProjectionsForSurplus(allocatableHigh)
+        optimistic: calculateProjectionsForSurplus(allocatableHigh, 'personal')
       }
     }
     
@@ -1532,6 +1594,8 @@ export type IncomeSource = {
   estimated_monthly_mid: number
   estimated_monthly_high: number
   status: 'active' | 'paused' | 'ended'
+  entity: 'personal' | 'business'
+  entity_label: string | null
   start_date: string | null
   end_date: string | null
   // Contract/schedule fields
@@ -1738,6 +1802,8 @@ function rowToIncomeSource(row: Record<string, unknown>): IncomeSource {
     estimated_monthly_mid: row.estimated_monthly_mid as number,
     estimated_monthly_high: row.estimated_monthly_high as number,
     status: row.status as IncomeSource['status'],
+    entity: (row.entity as IncomeSource['entity']) ?? 'personal',
+    entity_label: (row.entity_label as string | null) ?? null,
     start_date: row.start_date as string | null,
     end_date: row.end_date as string | null,
     initial_payment: (row.initial_payment as number) || 0,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { deleteConnection, getBankAccounts, getConnection, getConnectionAccessToken, getConnections } from '@/lib/bank-sync'
+import { db } from '@/lib/turso'
 import { removeItem } from '@/lib/plaid'
 
 /**
@@ -15,23 +16,49 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const [connections, accounts] = await Promise.all([
+    const [connections, accounts, counts] = await Promise.all([
       getConnections(session.user.id),
       getBankAccounts(session.user.id),
+      // Linking is meaningless to the user without evidence something arrived
+      db.execute({
+        sql: `SELECT connection_id, COUNT(*) AS n, MIN(date) AS earliest
+              FROM bank_transactions WHERE user_id = ? GROUP BY connection_id`,
+        args: [session.user.id],
+      }),
     ])
 
+    const byConnection = new Map(
+      counts.rows.map(row => {
+        const record = row as Record<string, unknown>
+        return [
+          record.connection_id as string,
+          { count: Number(record.n), earliest: record.earliest as string | null },
+        ]
+      })
+    )
+
     return NextResponse.json({
-      connections: connections.map(connection => ({
+      connections: connections.map(connection => {
+        const own = accounts.filter(account => account.connection_id === connection.id)
+        // One login can hold both personal and business accounts. Reporting the
+        // entity chosen at link time would mislabel the whole institution once
+        // any account inside it is re-tagged.
+        const entities = new Set(own.map(account => account.entity))
+        const mixed = entities.size > 1
+
+        return {
         id: connection.id,
         provider: connection.provider,
         institutionName: connection.institution_name,
         entity: connection.entity,
+        entityMixed: mixed,
         entityLabel: connection.entity_label,
         status: connection.status,
         statusDetail: connection.status_detail,
         lastSyncedAt: connection.last_synced_at,
-        accounts: accounts
-          .filter(account => account.connection_id === connection.id)
+        transactionCount: byConnection.get(connection.id)?.count ?? 0,
+        earliestTransaction: byConnection.get(connection.id)?.earliest ?? null,
+        accounts: own
           .map(account => ({
             id: account.id,
             name: account.name,
@@ -44,7 +71,8 @@ export async function GET() {
             entityLabel: account.entity_label,
             isExcluded: account.is_excluded,
           })),
-      })),
+        }
+      }),
     })
   } catch (error) {
     console.error('Error fetching connections:', error)
