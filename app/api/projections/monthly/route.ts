@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getGoals, getRecurringExpenses, getIncomeSources, getSideProjects, getTransactionsForMonth } from '@/lib/database'
-
-// Helper to get monthly growth rate from annual percentage
-const getMonthlyGrowthRate = (annualRatePercent: number | null | undefined): number => {
-  if (!annualRatePercent || annualRatePercent <= 0) return 0
-  return Math.pow(1 + annualRatePercent / 100, 1 / 12) - 1
-}
+import {
+  addMonths,
+  diffMonths,
+  getMonthStart,
+  getMonthlyGrowthRate,
+  parseLocalDate,
+} from '@/lib/projections'
+import { isIncomeSourceActive } from '@/lib/freshness'
 
 interface MonthlyProjection {
   month: string // YYYY-MM format
@@ -74,7 +76,7 @@ export async function GET(request: NextRequest) {
     ])
 
     const activeGoals = goals.filter(g => g.status === 'active')
-    const activeSources = incomeSources.filter(s => s.status === 'active')
+    const activeSources = incomeSources.filter(s => isIncomeSourceActive(s))
     const activeSideProjects = sideProjects.filter(p => p.status === 'active')
 
     // Calculate base income
@@ -87,12 +89,7 @@ export async function GET(request: NextRequest) {
       sum + (t.type === 'income' ? t.amount : -t.amount), 0
     )
 
-    // Date helpers
-    const getMonthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1)
-    const addMonths = (date: Date, months: number) => new Date(date.getFullYear(), date.getMonth() + months, 1)
-    const diffMonths = (start: Date, end: Date) => {
-      return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
-    }
+    // Date formatting (arithmetic comes from @/lib/projections)
     const formatMonth = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     const formatMonthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
@@ -149,8 +146,8 @@ export async function GET(request: NextRequest) {
     const goalStates: GoalState[] = activeGoals.map(goal => ({
       goal,
       balance: goal.current_amount,
-      startDate: goal.start_date ? getMonthStart(new Date(goal.start_date)) : startOfCurrentMonth,
-      deadline: getMonthStart(new Date(goal.deadline)),
+      startDate: goal.start_date ? getMonthStart(parseLocalDate(goal.start_date)) : startOfCurrentMonth,
+      deadline: getMonthStart(parseLocalDate(goal.deadline)),
       completionDate: null,
       monthlyAllocations: new Map()
     }))

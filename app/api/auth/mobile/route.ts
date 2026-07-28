@@ -2,6 +2,83 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/turso'
 import { generateUUID, getCurrentTimestamp } from '@/lib/turso'
 
+// A Google token is only proof of identity for US if it was issued to one of OUR
+// OAuth clients. Without an audience check, a token minted by any third-party
+// Google app would be accepted here and could be used to sign in as that email.
+const ALLOWED_AUDIENCES = [
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_IOS_CLIENT_ID,
+].filter((clientId): clientId is string => Boolean(clientId))
+
+const ALLOWED_ISSUERS = ['accounts.google.com', 'https://accounts.google.com']
+
+type GoogleIdTokenClaims = {
+  aud?: string
+  iss?: string
+  sub?: string
+  email?: string
+  email_verified?: string | boolean
+  name?: string
+  picture?: string
+}
+
+type VerifiedGoogleUser = {
+  sub: string
+  email: string
+  name: string | null
+  picture: string | null
+}
+
+type VerificationResult =
+  | { ok: true; user: VerifiedGoogleUser }
+  | { ok: false; reason: string }
+
+/**
+ * Verifies a Google ID token and returns its claims.
+ *
+ * Google's tokeninfo endpoint validates the signature and expiry for us; we then
+ * assert the token was issued by Google, for one of our clients, to a verified
+ * email address.
+ */
+async function verifyGoogleIdToken(idToken: string): Promise<VerificationResult> {
+  const response = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+  )
+
+  if (!response.ok) {
+    return { ok: false, reason: 'Google rejected the ID token (invalid or expired)' }
+  }
+
+  const claims = (await response.json()) as GoogleIdTokenClaims
+
+  if (!claims.iss || !ALLOWED_ISSUERS.includes(claims.iss)) {
+    return { ok: false, reason: 'Unexpected token issuer' }
+  }
+
+  if (!claims.aud || !ALLOWED_AUDIENCES.includes(claims.aud)) {
+    return { ok: false, reason: 'Token was not issued for this application' }
+  }
+
+  // tokeninfo returns this claim as the string "true"; be tolerant of both forms.
+  if (claims.email_verified !== true && claims.email_verified !== 'true') {
+    return { ok: false, reason: 'Google account email is not verified' }
+  }
+
+  if (!claims.sub || !claims.email) {
+    return { ok: false, reason: 'Token is missing required claims' }
+  }
+
+  return {
+    ok: true,
+    user: {
+      sub: claims.sub,
+      email: claims.email,
+      name: claims.name ?? null,
+      picture: claims.picture ?? null,
+    },
+  }
+}
+
 /**
  * Mobile OAuth callback endpoint
  * Accepts Google ID token from iOS app and creates a session
@@ -30,38 +107,27 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verify the token and get user info from Google
-    const googleUserInfo = await fetch(
-      `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`
-    )
-
-    if (!googleUserInfo.ok) {
-      const text = await googleUserInfo.text()
-      console.error('[auth/mobile] Google userinfo failed:', googleUserInfo.status, text)
+    if (ALLOWED_AUDIENCES.length === 0) {
+      console.error('[auth/mobile] No GOOGLE_CLIENT_ID/GOOGLE_IOS_CLIENT_ID configured')
       return NextResponse.json(
-        { error: 'Failed to verify Google token', details: `Google returned ${googleUserInfo.status}` },
+        { error: 'Server misconfigured', details: 'No Google client IDs configured' },
+        { status: 500 }
+      )
+    }
+
+    // Establish identity from the ID token only. The access token is opaque to us
+    // and is never treated as proof of who the caller is.
+    const verification = await verifyGoogleIdToken(idToken)
+
+    if (!verification.ok) {
+      console.error('[auth/mobile] ID token verification failed:', verification.reason)
+      return NextResponse.json(
+        { error: 'Failed to verify Google token', details: verification.reason },
         { status: 401 }
       )
     }
 
-    const googleUser = (await googleUserInfo.json()) as {
-      sub?: string
-      id?: string
-      email?: string
-      name?: string
-      picture?: string
-    }
-
-    if (!googleUser.email) {
-      console.error('[auth/mobile] Google response missing email. Keys:', Object.keys(googleUser))
-      return NextResponse.json(
-        {
-          error: 'Invalid Google user data',
-          details: 'No email in Google response. Ensure the app requests email scope.',
-        },
-        { status: 400 }
-      )
-    }
+    const googleUser = verification.user
 
     // Check if user exists in database
     const userResult = await db.execute({
@@ -134,7 +200,7 @@ export async function POST(request: Request) {
     // Check if account exists, create if not
     const accountResult = await db.execute({
       sql: `SELECT * FROM accounts WHERE provider = ? AND provider_account_id = ?`,
-      args: ['google', googleUser.sub || googleUser.id || '']
+      args: ['google', googleUser.sub]
     })
 
     if (accountResult.rows.length === 0) {
@@ -146,7 +212,7 @@ export async function POST(request: Request) {
           userId,
           'oauth',
           'google',
-          googleUser.sub || googleUser.id || '',
+          googleUser.sub,
           accessToken,
           idToken
         ]
@@ -160,7 +226,7 @@ export async function POST(request: Request) {
           accessToken,
           idToken,
           'google',
-          googleUser.sub || googleUser.id || ''
+          googleUser.sub
         ]
       })
     }

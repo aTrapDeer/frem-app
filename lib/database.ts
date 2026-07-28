@@ -1,4 +1,19 @@
 import { db, generateUUID, getCurrentTimestamp, getCurrentDate } from './turso'
+import {
+  addMonths,
+  calculateMonthlyRequired,
+  diffMonths,
+  effectiveRate,
+  estimateMonthsToComplete,
+  getMonthStart,
+  getMonthlyGrowthRate,
+  monthlyToDaily,
+  monthsUntil,
+  parseLocalDate,
+  toCents,
+  totalMonthlyGoalObligation,
+} from './projections'
+import { isIncomeSourceActive } from './freshness'
 
 // Type definitions
 export type Transaction = {
@@ -180,32 +195,8 @@ function rowToSideProject(row: Record<string, unknown>): SideProject {
   }
 }
 
-const getMonthlyGrowthRate = (annualRatePercent?: number | null) => {
-  if (!annualRatePercent || annualRatePercent <= 0) return 0
-  return Math.pow(1 + annualRatePercent / 100, 1 / 12) - 1
-}
-
-const calculateMonthlyRequired = (
-  targetAmount: number,
-  currentAmount: number,
-  monthsRemaining: number,
-  annualRatePercent?: number | null
-) => {
-  if (monthsRemaining <= 0) return 0
-  if (currentAmount >= targetAmount) return 0
-
-  const monthlyRate = getMonthlyGrowthRate(annualRatePercent)
-  const remaining = targetAmount - currentAmount
-
-  if (monthlyRate === 0) {
-    return remaining / monthsRemaining
-  }
-
-  const growthFactor = Math.pow(1 + monthlyRate, monthsRemaining)
-  const required = (targetAmount - currentAmount * growthFactor) * monthlyRate / (growthFactor - 1)
-
-  return Math.max(0, required)
-}
+// Growth and contribution math now lives in ./projections so the dashboard,
+// goals page, summary and AI context all answer from the same formulas.
 
 function rowToMilestone(row: Record<string, unknown>): Milestone {
   return {
@@ -254,6 +245,10 @@ export const getUserSettings = async (userId: string): Promise<UserSettings | nu
   })
   
   if (!result.rows[0]) return null
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToUserSettings(result.rows[0] as Record<string, unknown>)
 }
 
@@ -326,10 +321,14 @@ export const createTransaction = async (transaction: Omit<Transaction, 'id' | 'c
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM daily_transactions WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM daily_transactions WHERE id = ? AND user_id = ?',
+    args: [id, transaction.user_id]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToTransaction(result.rows[0] as Record<string, unknown>)
 }
 
@@ -369,7 +368,7 @@ export const getTransactionsForMonth = async (userId: string, monthStart?: strin
   return result.rows.map(row => rowToTransaction(row as Record<string, unknown>))
 }
 
-export const updateTransaction = async (id: string, updates: Partial<Transaction>): Promise<Transaction> => {
+export const updateTransaction = async (userId: string, id: string, updates: Partial<Transaction>): Promise<Transaction> => {
   const now = getCurrentTimestamp()
   const fields: string[] = ['updated_at = ?']
   const args: (string | number | null)[] = [now]
@@ -391,25 +390,29 @@ export const updateTransaction = async (id: string, updates: Partial<Transaction
     args.push(updates.category)
   }
   
-  args.push(id)
+  args.push(id, userId)
   
   await db.execute({
-    sql: `UPDATE daily_transactions SET ${fields.join(', ')} WHERE id = ?`,
+    sql: `UPDATE daily_transactions SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
     args
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM daily_transactions WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM daily_transactions WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToTransaction(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteTransaction = async (id: string): Promise<void> => {
+export const deleteTransaction = async (userId: string, id: string): Promise<void> => {
   await db.execute({
-    sql: 'DELETE FROM daily_transactions WHERE id = ?',
-    args: [id]
+    sql: 'DELETE FROM daily_transactions WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
 }
 
@@ -444,10 +447,14 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM financial_goals WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM financial_goals WHERE id = ? AND user_id = ?',
+    args: [id, goal.user_id]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToGoal(result.rows[0] as Record<string, unknown>)
 }
 
@@ -467,7 +474,7 @@ export const getGoals = async (userId: string, includeCancelled: boolean = false
   return result.rows.map(row => rowToGoal(row as Record<string, unknown>))
 }
 
-export const updateGoal = async (id: string, updates: Partial<Goal>): Promise<Goal> => {
+export const updateGoal = async (userId: string, id: string, updates: Partial<Goal>): Promise<Goal> => {
   const now = getCurrentTimestamp()
   const fields: string[] = ['updated_at = ?']
   const args: (string | number | null)[] = [now]
@@ -521,25 +528,29 @@ export const updateGoal = async (id: string, updates: Partial<Goal>): Promise<Go
     }
   }
   
-  args.push(id)
+  args.push(id, userId)
   
   await db.execute({
-    sql: `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = ?`,
+    sql: `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
     args
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM financial_goals WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM financial_goals WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToGoal(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteGoal = async (id: string): Promise<void> => {
+export const deleteGoal = async (userId: string, id: string): Promise<void> => {
   await db.execute({
-    sql: 'DELETE FROM financial_goals WHERE id = ?',
-    args: [id]
+    sql: 'DELETE FROM financial_goals WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
 }
 
@@ -561,10 +572,10 @@ function rowToGoalContribution(row: Record<string, unknown>): GoalContribution {
   }
 }
 
-export const getGoalContributions = async (goalId: string): Promise<GoalContribution[]> => {
+export const getGoalContributions = async (userId: string, goalId: string): Promise<GoalContribution[]> => {
   const result = await db.execute({
-    sql: 'SELECT * FROM goal_contributions WHERE goal_id = ? ORDER BY contribution_date DESC, created_at DESC',
-    args: [goalId]
+    sql: 'SELECT * FROM goal_contributions WHERE goal_id = ? AND user_id = ? ORDER BY contribution_date DESC, created_at DESC',
+    args: [goalId, userId]
   })
   return result.rows.map(row => rowToGoalContribution(row as Record<string, unknown>))
 }
@@ -592,23 +603,27 @@ export const createGoalContribution = async (contribution: Omit<GoalContribution
   
   // Update the goal's current_amount
   await db.execute({
-    sql: `UPDATE financial_goals SET current_amount = current_amount + ?, updated_at = ? WHERE id = ?`,
-    args: [contribution.amount, now, contribution.goal_id]
+    sql: `UPDATE financial_goals SET current_amount = current_amount + ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    args: [contribution.amount, now, contribution.goal_id, contribution.user_id]
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM goal_contributions WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM goal_contributions WHERE id = ? AND user_id = ?',
+    args: [id, contribution.user_id]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToGoalContribution(result.rows[0] as Record<string, unknown>)
 }
 
 // Get full breakdown for a goal (contributions + projections)
 export const getGoalBreakdown = async (goalId: string, userId: string) => {
   const [goal, contributions, oneTimeIncomes] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM financial_goals WHERE id = ?', args: [goalId] }),
-    getGoalContributions(goalId),
+    db.execute({ sql: 'SELECT * FROM financial_goals WHERE id = ? AND user_id = ?', args: [goalId, userId] }),
+    getGoalContributions(userId, goalId),
     getOneTimeIncomes(userId)
   ])
   
@@ -633,7 +648,7 @@ export const getGoalBreakdown = async (goalId: string, userId: string) => {
   const deadline = new Date(goalData.deadline)
   const startDate = goalData.start_date ? new Date(goalData.start_date) : today
   const effectiveStart = startDate > today ? startDate : today
-  const monthsRemaining = Math.max(1, Math.round((deadline.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
+  const monthsRemaining = monthsUntil(deadline, effectiveStart)
   const remaining = goalData.target_amount - goalData.current_amount
   const monthlyRequired = calculateMonthlyRequired(
     goalData.target_amount,
@@ -658,8 +673,8 @@ export const getGoalBreakdown = async (goalId: string, userId: string) => {
     paymentSchedule.push({
       date: date.toISOString().split('T')[0],
       month: date.toLocaleString('default', { month: 'short', year: 'numeric' }),
-      expectedContribution: Math.round(monthlyRequired * 100) / 100,
-      runningTotal: Math.min(Math.round(runningTotal * 100) / 100, goalData.target_amount),
+      expectedContribution: toCents(monthlyRequired),
+      runningTotal: Math.min(toCents(runningTotal), goalData.target_amount),
       progressPercent: Math.min(Math.round((runningTotal / goalData.target_amount) * 100), 100)
     })
   }
@@ -670,16 +685,16 @@ export const getGoalBreakdown = async (goalId: string, userId: string) => {
       all: contributions,
       manual: manualContributions,
       oneTime: oneTimeContributions,
-      totalManual: Math.round(manualTotal * 100) / 100,
-      totalOneTime: Math.round(oneTimeTotal * 100) / 100
+      totalManual: toCents(manualTotal),
+      totalOneTime: toCents(oneTimeTotal)
     },
     appliedIncomes,
     summary: {
       targetAmount: goalData.target_amount,
       currentAmount: goalData.current_amount,
-      remaining: Math.round(remaining * 100) / 100,
+      remaining: toCents(remaining),
       monthsRemaining,
-      monthlyRequired: Math.round(monthlyRequired * 100) / 100,
+      monthlyRequired: toCents(monthlyRequired),
       deadline: goalData.deadline,
       progressPercent: Math.round((goalData.current_amount / goalData.target_amount) * 100)
     },
@@ -715,10 +730,14 @@ export const createRecurringExpense = async (expense: Omit<RecurringExpense, 'id
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM recurring_expenses WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM recurring_expenses WHERE id = ? AND user_id = ?',
+    args: [id, expense.user_id]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToRecurringExpense(result.rows[0] as Record<string, unknown>)
 }
 
@@ -731,7 +750,7 @@ export const getRecurringExpenses = async (userId: string): Promise<RecurringExp
   return result.rows.map(row => rowToRecurringExpense(row as Record<string, unknown>))
 }
 
-export const updateRecurringExpense = async (id: string, updates: Partial<RecurringExpense>): Promise<RecurringExpense> => {
+export const updateRecurringExpense = async (userId: string, id: string, updates: Partial<RecurringExpense>): Promise<RecurringExpense> => {
   const now = getCurrentTimestamp()
   const fields: string[] = ['updated_at = ?']
   const args: (string | number | null)[] = [now]
@@ -769,25 +788,29 @@ export const updateRecurringExpense = async (id: string, updates: Partial<Recurr
     args.push(updates.reminder_enabled ? 1 : 0)
   }
   
-  args.push(id)
+  args.push(id, userId)
   
   await db.execute({
-    sql: `UPDATE recurring_expenses SET ${fields.join(', ')} WHERE id = ?`,
+    sql: `UPDATE recurring_expenses SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
     args
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM recurring_expenses WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM recurring_expenses WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToRecurringExpense(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteRecurringExpense = async (id: string): Promise<void> => {
+export const deleteRecurringExpense = async (userId: string, id: string): Promise<void> => {
   await db.execute({
-    sql: 'DELETE FROM recurring_expenses WHERE id = ?',
-    args: [id]
+    sql: 'DELETE FROM recurring_expenses WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
 }
 
@@ -820,10 +843,14 @@ export const createSideProject = async (project: Omit<SideProject, 'id' | 'creat
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM side_projects WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM side_projects WHERE id = ? AND user_id = ?',
+    args: [id, project.user_id]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToSideProject(result.rows[0] as Record<string, unknown>)
 }
 
@@ -836,7 +863,7 @@ export const getSideProjects = async (userId: string): Promise<SideProject[]> =>
   return result.rows.map(row => rowToSideProject(row as Record<string, unknown>))
 }
 
-export const updateSideProject = async (id: string, updates: Partial<SideProject>): Promise<SideProject> => {
+export const updateSideProject = async (userId: string, id: string, updates: Partial<SideProject>): Promise<SideProject> => {
   const now = getCurrentTimestamp()
   const fields: string[] = ['updated_at = ?']
   const args: (string | number | null)[] = [now]
@@ -878,25 +905,29 @@ export const updateSideProject = async (id: string, updates: Partial<SideProject
     args.push(updates.end_date)
   }
   
-  args.push(id)
+  args.push(id, userId)
   
   await db.execute({
-    sql: `UPDATE side_projects SET ${fields.join(', ')} WHERE id = ?`,
+    sql: `UPDATE side_projects SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
     args
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM side_projects WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM side_projects WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToSideProject(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteSideProject = async (id: string): Promise<void> => {
+export const deleteSideProject = async (userId: string, id: string): Promise<void> => {
   await db.execute({
-    sql: 'DELETE FROM side_projects WHERE id = ?',
-    args: [id]
+    sql: 'DELETE FROM side_projects WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
 }
 
@@ -929,10 +960,14 @@ export const createMilestone = async (milestone: Omit<Milestone, 'id' | 'created
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM financial_milestones WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM financial_milestones WHERE id = ? AND user_id = ?',
+    args: [id, milestone.user_id]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToMilestone(result.rows[0] as Record<string, unknown>)
 }
 
@@ -945,7 +980,7 @@ export const getMilestones = async (userId: string): Promise<Milestone[]> => {
   return result.rows.map(row => rowToMilestone(row as Record<string, unknown>))
 }
 
-export const updateMilestone = async (id: string, updates: Partial<Milestone>): Promise<Milestone> => {
+export const updateMilestone = async (userId: string, id: string, updates: Partial<Milestone>): Promise<Milestone> => {
   const now = getCurrentTimestamp()
   const fields: string[] = ['updated_at = ?']
   const args: (string | number | null)[] = [now]
@@ -991,25 +1026,29 @@ export const updateMilestone = async (id: string, updates: Partial<Milestone>): 
     args.push(updates.deadline)
   }
   
-  args.push(id)
+  args.push(id, userId)
   
   await db.execute({
-    sql: `UPDATE financial_milestones SET ${fields.join(', ')} WHERE id = ?`,
+    sql: `UPDATE financial_milestones SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
     args
   })
   
   const result = await db.execute({
-    sql: 'SELECT * FROM financial_milestones WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM financial_milestones WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
   
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToMilestone(result.rows[0] as Record<string, unknown>)
 }
 
-export const deleteMilestone = async (id: string): Promise<void> => {
+export const deleteMilestone = async (userId: string, id: string): Promise<void> => {
   await db.execute({
-    sql: 'DELETE FROM financial_milestones WHERE id = ?',
-    args: [id]
+    sql: 'DELETE FROM financial_milestones WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
 }
 
@@ -1065,16 +1104,10 @@ export const calculateDailyTarget = async (userId: string) => {
     const goals = await getGoals(userId)
     const activeGoals = goals.filter(goal => goal.status === 'active')
     
-    const monthlyGoalObligations = activeGoals.reduce((sum, goal) => {
-      const today = new Date()
-      const deadline = new Date(goal.deadline)
-      const monthsLeft = Math.max(1, Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
-      
-      const remainingAmount = goal.target_amount - goal.current_amount
-      const monthlyRequired = remainingAmount / monthsLeft
-      
-      return sum + Math.max(0, monthlyRequired)
-    }, 0)
+    // Single source of truth: the same obligation the goals page and projections
+    // report. Previously this divided by a rounded day-count and ignored growth,
+    // so the dashboard could disagree with the goals page for the same goal.
+    const monthlyGoalObligations = totalMonthlyGoalObligation(activeGoals)
     
     // Get recurring expenses
     const recurringExpenses = await getRecurringExpenses(userId)
@@ -1084,7 +1117,7 @@ export const calculateDailyTarget = async (userId: string) => {
     const totalMonthlyObligations = monthlyGoalObligations + monthlyRecurringTotal
     
     // Convert to daily target
-    const dailyTarget = totalMonthlyObligations / 30.44
+    const dailyTarget = monthlyToDaily(totalMonthlyObligations)
     
     // Get side projects income
     const sideProjects = await getSideProjects(userId)
@@ -1100,7 +1133,7 @@ export const calculateDailyTarget = async (userId: string) => {
     
     try {
       const incomeSources = await getIncomeSources(userId)
-      const activeSources = incomeSources.filter(s => s.status === 'active')
+      const activeSources = incomeSources.filter(s => isIncomeSourceActive(s))
       
       if (activeSources.length > 0) {
         hasCommissionIncome = activeSources.some(s => s.is_commission_based)
@@ -1139,24 +1172,24 @@ export const calculateDailyTarget = async (userId: string) => {
     const estimatedMonthlyIncome = (incomeFromSources > 0 ? incomeFromSources : recurringMonthlyIncome) + monthlyProjectIncome
     
     const monthlySurplusDeficit = estimatedMonthlyIncome - totalMonthlyObligations
-    const dailySurplusDeficit = monthlySurplusDeficit / 30.44
+    const dailySurplusDeficit = monthlyToDaily(monthlySurplusDeficit)
     
     return {
-      dailyTarget: Math.round(dailyTarget * 100) / 100,
-      monthlyGoalObligations: Math.round(monthlyGoalObligations * 100) / 100,
-      monthlyRecurringTotal: Math.round(monthlyRecurringTotal * 100) / 100,
-      totalMonthlyObligations: Math.round(totalMonthlyObligations * 100) / 100,
-      estimatedMonthlyIncome: Math.round(estimatedMonthlyIncome * 100) / 100,
-      monthlyProjectIncome: Math.round(monthlyProjectIncome * 100) / 100,
-      monthlySurplusDeficit: Math.round(monthlySurplusDeficit * 100) / 100,
-      dailySurplusDeficit: Math.round(dailySurplusDeficit * 100) / 100,
+      dailyTarget: toCents(dailyTarget),
+      monthlyGoalObligations: toCents(monthlyGoalObligations),
+      monthlyRecurringTotal: toCents(monthlyRecurringTotal),
+      totalMonthlyObligations: toCents(totalMonthlyObligations),
+      estimatedMonthlyIncome: toCents(estimatedMonthlyIncome),
+      monthlyProjectIncome: toCents(monthlyProjectIncome),
+      monthlySurplusDeficit: toCents(monthlySurplusDeficit),
+      dailySurplusDeficit: toCents(dailySurplusDeficit),
       activeGoalsCount: activeGoals.length,
       recurringExpensesCount: recurringExpenses.length,
       // New income source fields
       hasCommissionIncome,
-      incomeEstimateLow: Math.round(incomeEstimateLow * 100) / 100,
-      incomeEstimateMid: Math.round(incomeEstimateMid * 100) / 100,
-      incomeEstimateHigh: Math.round(incomeEstimateHigh * 100) / 100,
+      incomeEstimateLow: toCents(incomeEstimateLow),
+      incomeEstimateMid: toCents(incomeEstimateMid),
+      incomeEstimateHigh: toCents(incomeEstimateHigh),
     }
   } catch (error) {
     console.error('Error calculating daily target:', error)
@@ -1233,7 +1266,7 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     ])
     
     const activeGoals = goals.filter(g => g.status === 'active')
-    const activeSources = incomeSources.filter(s => s.status === 'active')
+    const activeSources = incomeSources.filter(s => isIncomeSourceActive(s))
     const activeSideProjects = sideProjects.filter(p => p.status === 'active')
     
     // Calculate one-time net for the current month
@@ -1283,38 +1316,11 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     const allocatableMid = Math.max(0, surplusMid - reserveMid)
     const allocatableHigh = Math.max(0, surplusHigh - reserveHigh)
 
-    const getMonthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1)
-    const addMonths = (date: Date, months: number) => new Date(date.getFullYear(), date.getMonth() + months, 1)
-    const diffMonths = (start: Date, end: Date) => {
-      return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
-    }
-
-    const estimateMonthsToComplete = (
-      balance: number,
-      target: number,
-      monthlyAllocation: number,
-      annualRatePercent?: number | null
-    ) => {
-      if (balance >= target) return 0
-      const monthlyRate = getMonthlyGrowthRate(annualRatePercent)
-      if (monthlyRate === 0) {
-        if (monthlyAllocation <= 0) return Infinity
-        return (target - balance) / monthlyAllocation
-      }
-
-      const paymentFactor = monthlyAllocation / monthlyRate
-      const numerator = target - paymentFactor
-      const denominator = balance - paymentFactor
-
-      if (denominator <= 0 || numerator <= 0) return Infinity
-      return Math.log(numerator / denominator) / Math.log(1 + monthlyRate)
-    }
-
     const calculateProjectionsForSurplus = (monthlySurplus: number): GoalProjection[] => {
       const today = new Date()
       const startOfMonth = getMonthStart(today)
       const maxDeadline = activeGoals.reduce((max, goal) => {
-        const deadline = new Date(goal.deadline)
+        const deadline = parseLocalDate(goal.deadline)
         return deadline > max ? deadline : max
       }, startOfMonth)
       const monthsToMaxDeadline = Math.max(1, diffMonths(startOfMonth, maxDeadline) + 1)
@@ -1323,8 +1329,8 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
       const goalStates = activeGoals.map(goal => ({
         goal,
         balance: goal.current_amount,
-        startDate: goal.start_date ? getMonthStart(new Date(goal.start_date)) : startOfMonth,
-        deadline: getMonthStart(new Date(goal.deadline)),
+        startDate: goal.start_date ? getMonthStart(parseLocalDate(goal.start_date)) : startOfMonth,
+        deadline: getMonthStart(parseLocalDate(goal.deadline)),
         totalAllocated: 0,
         allocationMonths: 0,
         completionDate: null as Date | null,
@@ -1369,9 +1375,7 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
             state.allocationMonths += 1
           }
 
-          const monthlyRate = state.goal.category === 'investment'
-            ? getMonthlyGrowthRate(state.goal.interest_rate)
-            : 0
+          const monthlyRate = getMonthlyGrowthRate(effectiveRate(state.goal))
 
           state.balance = state.balance * (1 + monthlyRate) + allocation
 
@@ -1397,7 +1401,7 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
           state.goal.current_amount,
           state.goal.target_amount,
           monthlyAllocation,
-          state.goal.category === 'investment' ? state.goal.interest_rate : null
+          effectiveRate(state.goal)
         )
 
         const projectedCompletionDate = state.completionDate
@@ -1439,7 +1443,7 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
             state.goal.current_amount,
             state.goal.target_amount,
             monthlyAllocation,
-            state.goal.interest_rate
+            effectiveRate(state.goal)
           )
           if (monthsNeeded !== Infinity && monthsNeeded > 0) {
             const suggested = addMonths(startOfMonth, Math.ceil(monthsNeeded) + 1)
@@ -1452,10 +1456,10 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
           title: state.goal.title,
           targetAmount: state.goal.target_amount,
           currentAmount: state.goal.current_amount,
-          projectedAmount: Math.round(projectedAmount * 100) / 100,
-          totalProjectedProgress: Math.round(projectedAmount * 100) / 100,
-          progressPercentage: Math.round(progressPercentage * 100) / 100,
-          monthlyAllocation: Math.round(monthlyAllocation * 100) / 100,
+          projectedAmount: toCents(projectedAmount),
+          totalProjectedProgress: toCents(projectedAmount),
+          progressPercentage: toCents(progressPercentage),
+          monthlyAllocation: toCents(monthlyAllocation),
           urgencyScore: state.goal.urgency_score || 3,
           originalDeadline: state.goal.deadline,
           projectedCompletionDate: projectedCompletionDate.toISOString().split('T')[0],
@@ -1474,13 +1478,13 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
 
     const result: ProjectionSummary = {
       goals: goalProjections,
-      totalMonthlyIncome: Math.round(monthlyIncomeMid * 100) / 100,
-      totalMonthlyExpenses: Math.round(monthlyExpenses * 100) / 100,
-      monthlySurplus: Math.round(surplusMid * 100) / 100,
-      surplusAllocatedToGoals: Math.round(allocatableMid * 100) / 100,
-      bankReserve: Math.round(reserveMid * 100) / 100,
+      totalMonthlyIncome: toCents(monthlyIncomeMid),
+      totalMonthlyExpenses: toCents(monthlyExpenses),
+      monthlySurplus: toCents(surplusMid),
+      surplusAllocatedToGoals: toCents(allocatableMid),
+      bankReserve: toCents(reserveMid),
       hasVariableIncome,
-      oneTimeNet: Math.round(oneTimeNet * 100) / 100
+      oneTimeNet: toCents(oneTimeNet)
     }
 
     // Add scenarios if variable income
@@ -1606,9 +1610,9 @@ function calculateMonthlyEstimates(source: Partial<IncomeSource>): { low: number
     const { initialAmortized, finalAmortized } = calculateContractAmortization(source)
     
     return {
-      low: Math.round((baseMonthly + monthlyCommissionLow - monthlyCommissionMid + initialAmortized + finalAmortized) * 100) / 100,
-      mid: Math.round((baseMonthly + initialAmortized + finalAmortized) * 100) / 100,
-      high: Math.round((baseMonthly + monthlyCommissionHigh - monthlyCommissionMid + initialAmortized + finalAmortized) * 100) / 100
+      low: toCents((baseMonthly + monthlyCommissionLow - monthlyCommissionMid + initialAmortized + finalAmortized)),
+      mid: toCents((baseMonthly + initialAmortized + finalAmortized)),
+      high: toCents((baseMonthly + monthlyCommissionHigh - monthlyCommissionMid + initialAmortized + finalAmortized))
     }
   }
   
@@ -1618,9 +1622,9 @@ function calculateMonthlyEstimates(source: Partial<IncomeSource>): { low: number
   
   // Non-commission income has same low/mid/high
   return {
-    low: Math.round(totalMonthly * 100) / 100,
-    mid: Math.round(totalMonthly * 100) / 100,
-    high: Math.round(totalMonthly * 100) / 100
+    low: toCents(totalMonthly),
+    mid: toCents(totalMonthly),
+    high: toCents(totalMonthly)
   }
 }
 
@@ -1707,8 +1711,8 @@ export function calculateTotalContractValue(source: IncomeSource): {
   const totalValue = recurringTotal + (source.initial_payment || 0) + (source.final_payment || 0)
   
   return {
-    totalValue: Math.round(totalValue * 100) / 100,
-    recurringTotal: Math.round(recurringTotal * 100) / 100,
+    totalValue: toCents(totalValue),
+    recurringTotal: toCents(recurringTotal),
     initialPayment: source.initial_payment || 0,
     finalPayment: source.final_payment || 0,
     contractMonths,
@@ -1753,10 +1757,10 @@ export const getIncomeSources = async (userId: string): Promise<IncomeSource[]> 
   return result.rows.map(row => rowToIncomeSource(row as Record<string, unknown>))
 }
 
-export const getIncomeSourceById = async (id: string): Promise<IncomeSource | null> => {
+export const getIncomeSourceById = async (userId: string, id: string): Promise<IncomeSource | null> => {
   const result = await db.execute({
-    sql: 'SELECT * FROM income_sources WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM income_sources WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
   return result.rows.length > 0 ? rowToIncomeSource(result.rows[0] as Record<string, unknown>) : null
 }
@@ -1794,14 +1798,14 @@ export const createIncomeSource = async (source: Omit<IncomeSource, 'id' | 'crea
     ]
   })
   
-  return getIncomeSourceById(id) as Promise<IncomeSource>
+  return getIncomeSourceById(source.user_id, id) as Promise<IncomeSource>
 }
 
-export const updateIncomeSource = async (id: string, updates: Partial<IncomeSource>): Promise<IncomeSource> => {
+export const updateIncomeSource = async (userId: string, id: string, updates: Partial<IncomeSource>): Promise<IncomeSource> => {
   const now = getCurrentTimestamp()
   
   // Get current source to merge with updates for estimate calculation
-  const current = await getIncomeSourceById(id)
+  const current = await getIncomeSourceById(userId, id)
   if (!current) throw new Error('Income source not found')
   
   const merged = { ...current, ...updates }
@@ -1837,16 +1841,16 @@ export const updateIncomeSource = async (id: string, updates: Partial<IncomeSour
   values.push(id)
   
   await db.execute({
-    sql: `UPDATE income_sources SET ${fields.join(', ')} WHERE id = ?`,
+    sql: `UPDATE income_sources SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
     args: values
   })
   
-  return getIncomeSourceById(id) as Promise<IncomeSource>
+  return getIncomeSourceById(userId, id) as Promise<IncomeSource>
 }
 
-export const deleteIncomeSource = async (id: string): Promise<void> => {
+export const deleteIncomeSource = async (userId: string, id: string): Promise<void> => {
   await db.execute({
-    sql: 'UPDATE income_sources SET status = ?, updated_at = ? WHERE id = ?',
+    sql: 'UPDATE income_sources SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?',
     args: ['ended', getCurrentTimestamp(), id]
   })
 }
@@ -1854,7 +1858,7 @@ export const deleteIncomeSource = async (id: string): Promise<void> => {
 // Get income summary for a user (used in dashboard/summary)
 export const getIncomeSummary = async (userId: string) => {
   const sources = await getIncomeSources(userId)
-  const activeSources = sources.filter(s => s.status === 'active')
+  const activeSources = sources.filter(s => isIncomeSourceActive(s))
   
   const hasCommissionIncome = activeSources.some(s => s.is_commission_based)
   
@@ -1867,9 +1871,9 @@ export const getIncomeSummary = async (userId: string) => {
   return {
     sources: activeSources,
     hasCommissionIncome,
-    totalMonthlyLow: Math.round(totalMonthlyLow * 100) / 100,
-    totalMonthlyMid: Math.round(totalMonthlyMid * 100) / 100,
-    totalMonthlyHigh: Math.round(totalMonthlyHigh * 100) / 100,
+    totalMonthlyLow: toCents(totalMonthlyLow),
+    totalMonthlyMid: toCents(totalMonthlyMid),
+    totalMonthlyHigh: toCents(totalMonthlyHigh),
     primarySource: primarySource || null,
     sourceCount: activeSources.length
   }
@@ -1920,6 +1924,10 @@ export const getAIFinancialReport = async (userId: string): Promise<AIFinancialR
   })
   
   if (!result.rows[0]) return null
+  if (result.rows.length === 0) {
+    throw new Error('Record not found or not owned by this user')
+  }
+
   return rowToAIFinancialReport(result.rows[0] as Record<string, unknown>)
 }
 
@@ -2064,7 +2072,7 @@ export const buildAIContext = async (userId: string) => {
   ])
   
   const activeGoals = goals.filter(g => g.status === 'active')
-  const activeSources = incomeSources.filter(s => s.status === 'active')
+  const activeSources = incomeSources.filter(s => isIncomeSourceActive(s))
   const activeSideProjects = sideProjects.filter(p => p.status === 'active')
   
   // Calculate income estimates
@@ -2104,7 +2112,7 @@ export const buildAIContext = async (userId: string) => {
       interestRate: goal.interest_rate,
       deadline: goal.deadline,
       monthsRemaining: monthsLeft,
-      monthlyRequired: Math.round(monthlyRequired * 100) / 100,
+      monthlyRequired: toCents(monthlyRequired),
       progressPercentage: Math.round((goal.current_amount / goal.target_amount) * 100),
       priority: goal.priority,
       urgencyScore: goal.urgency_score
@@ -2215,7 +2223,7 @@ export const buildAIContext = async (userId: string) => {
       totalMonthlyExpenses: monthlyExpenses,
       totalMonthlyObligations,
       monthlySurplus,
-      savingsRate: Math.round(savingsRate * 100) / 100,
+      savingsRate: toCents(savingsRate),
       totalGoalsAmount,
       totalGoalsRemaining,
       activeGoalsCount: activeGoals.length,
@@ -2282,10 +2290,10 @@ export const getFinancialAccounts = async (userId: string): Promise<FinancialAcc
   return result.rows.map(row => rowToFinancialAccount(row as Record<string, unknown>))
 }
 
-export const getFinancialAccountById = async (id: string): Promise<FinancialAccount | null> => {
+export const getFinancialAccountById = async (userId: string, id: string): Promise<FinancialAccount | null> => {
   const result = await db.execute({
-    sql: 'SELECT * FROM financial_accounts WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM financial_accounts WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
   return result.rows.length > 0 ? rowToFinancialAccount(result.rows[0] as Record<string, unknown>) : null
 }
@@ -2311,10 +2319,10 @@ export const createFinancialAccount = async (account: Omit<FinancialAccount, 'id
     ]
   })
   
-  return getFinancialAccountById(id) as Promise<FinancialAccount>
+  return getFinancialAccountById(account.user_id, id) as Promise<FinancialAccount>
 }
 
-export const updateFinancialAccount = async (id: string, updates: Partial<FinancialAccount>): Promise<FinancialAccount> => {
+export const updateFinancialAccount = async (userId: string, id: string, updates: Partial<FinancialAccount>): Promise<FinancialAccount> => {
   const now = getCurrentTimestamp()
   const fields: string[] = ['updated_at = ?']
   const args: (string | number | null)[] = [now]
@@ -2344,20 +2352,20 @@ export const updateFinancialAccount = async (id: string, updates: Partial<Financ
     args.push(updates.account_type)
   }
   
-  args.push(id)
+  args.push(id, userId)
   
   await db.execute({
-    sql: `UPDATE financial_accounts SET ${fields.join(', ')} WHERE id = ?`,
+    sql: `UPDATE financial_accounts SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
     args
   })
   
-  return getFinancialAccountById(id) as Promise<FinancialAccount>
+  return getFinancialAccountById(userId, id) as Promise<FinancialAccount>
 }
 
-export const deleteFinancialAccount = async (id: string): Promise<void> => {
+export const deleteFinancialAccount = async (userId: string, id: string): Promise<void> => {
   await db.execute({
-    sql: 'DELETE FROM financial_accounts WHERE id = ?',
-    args: [id]
+    sql: 'DELETE FROM financial_accounts WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
 }
 
@@ -2376,9 +2384,9 @@ export const getAccountsSummary = async (userId: string) => {
     accounts,
     checkingAccounts,
     savingsAccounts,
-    totalChecking: Math.round(totalChecking * 100) / 100,
-    totalSavings: Math.round(totalSavings * 100) / 100,
-    totalBalance: Math.round(totalBalance * 100) / 100,
+    totalChecking: toCents(totalChecking),
+    totalSavings: toCents(totalSavings),
+    totalBalance: toCents(totalBalance),
     checkingCount: checkingAccounts.length,
     savingsCount: savingsAccounts.length
   }
@@ -2426,10 +2434,10 @@ export const getOneTimeIncomes = async (userId: string): Promise<OneTimeIncome[]
   return result.rows.map(row => rowToOneTimeIncome(row as Record<string, unknown>))
 }
 
-export const getOneTimeIncomeById = async (id: string): Promise<OneTimeIncome | null> => {
+export const getOneTimeIncomeById = async (userId: string, id: string): Promise<OneTimeIncome | null> => {
   const result = await db.execute({
-    sql: 'SELECT * FROM one_time_income WHERE id = ?',
-    args: [id]
+    sql: 'SELECT * FROM one_time_income WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
   return result.rows.length > 0 ? rowToOneTimeIncome(result.rows[0] as Record<string, unknown>) : null
 }
@@ -2465,10 +2473,10 @@ export const createOneTimeIncome = async (income: Omit<OneTimeIncome, 'id' | 'cr
     ]
   })
   
-  return getOneTimeIncomeById(id) as Promise<OneTimeIncome>
+  return getOneTimeIncomeById(income.user_id, id) as Promise<OneTimeIncome>
 }
 
-export const updateOneTimeIncome = async (id: string, updates: Partial<OneTimeIncome>): Promise<OneTimeIncome> => {
+export const updateOneTimeIncome = async (userId: string, id: string, updates: Partial<OneTimeIncome>): Promise<OneTimeIncome> => {
   const now = getCurrentTimestamp()
   const fields: string[] = ['updated_at = ?']
   const args: (string | number | null)[] = [now]
@@ -2502,32 +2510,32 @@ export const updateOneTimeIncome = async (id: string, updates: Partial<OneTimeIn
     args.push(updates.notes)
   }
   
-  args.push(id)
+  args.push(id, userId)
   
   await db.execute({
-    sql: `UPDATE one_time_income SET ${fields.join(', ')} WHERE id = ?`,
+    sql: `UPDATE one_time_income SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
     args
   })
   
-  return getOneTimeIncomeById(id) as Promise<OneTimeIncome>
+  return getOneTimeIncomeById(userId, id) as Promise<OneTimeIncome>
 }
 
-export const deleteOneTimeIncome = async (id: string): Promise<void> => {
+export const deleteOneTimeIncome = async (userId: string, id: string): Promise<void> => {
   await db.execute({
-    sql: 'DELETE FROM one_time_income WHERE id = ?',
-    args: [id]
+    sql: 'DELETE FROM one_time_income WHERE id = ? AND user_id = ?',
+    args: [id, userId]
   })
 }
 
 // Apply one-time income to a goal (updates both the income record and the goal's current_amount)
-export const applyOneTimeIncomeToGoal = async (incomeId: string, goalId: string): Promise<{ income: OneTimeIncome, goal: Goal }> => {
-  const income = await getOneTimeIncomeById(incomeId)
+export const applyOneTimeIncomeToGoal = async (userId: string, incomeId: string, goalId: string): Promise<{ income: OneTimeIncome, goal: Goal }> => {
+  const income = await getOneTimeIncomeById(userId, incomeId)
   if (!income) throw new Error('One-time income not found')
   if (income.applied_to_goals) throw new Error('Income already applied to a goal')
   
   const goal = await db.execute({
-    sql: 'SELECT * FROM financial_goals WHERE id = ?',
-    args: [goalId]
+    sql: 'SELECT * FROM financial_goals WHERE id = ? AND user_id = ?',
+    args: [goalId, userId]
   })
   if (!goal.rows[0]) throw new Error('Goal not found')
   
@@ -2535,13 +2543,13 @@ export const applyOneTimeIncomeToGoal = async (incomeId: string, goalId: string)
   const newAmount = Math.min(currentGoal.current_amount + income.amount, currentGoal.target_amount)
   
   // Update the goal's current_amount
-  const updatedGoal = await updateGoal(goalId, { 
+  const updatedGoal = await updateGoal(userId, goalId, { 
     current_amount: newAmount,
     status: newAmount >= currentGoal.target_amount ? 'completed' : currentGoal.status
   })
   
   // Mark the income as applied
-  const updatedIncome = await updateOneTimeIncome(incomeId, {
+  const updatedIncome = await updateOneTimeIncome(userId, incomeId, {
     applied_to_goals: true,
     goal_id: goalId
   })
@@ -2570,10 +2578,10 @@ export const getOneTimeIncomeSummary = async (userId: string) => {
     incomes,
     appliedIncomes,
     unappliedIncomes,
-    totalAmount: Math.round(totalAmount * 100) / 100,
-    appliedAmount: Math.round(appliedAmount * 100) / 100,
-    unappliedAmount: Math.round(unappliedAmount * 100) / 100,
-    recentTotal: Math.round(recentTotal * 100) / 100,
+    totalAmount: toCents(totalAmount),
+    appliedAmount: toCents(appliedAmount),
+    unappliedAmount: toCents(unappliedAmount),
+    recentTotal: toCents(recentTotal),
     totalCount: incomes.length,
     unappliedCount: unappliedIncomes.length
   }

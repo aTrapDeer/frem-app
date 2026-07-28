@@ -58,7 +58,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Transaction ID is required' }, { status: 400 })
     }
 
-    await deleteTransaction(id)
+    await deleteTransaction(session.user.id, id)
     return NextResponse.json({ message: 'Transaction deleted successfully' })
   } catch (error) {
     console.error('Error deleting transaction:', error)
@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Transaction ID is required' }, { status: 400 })
     }
 
-    const transaction = await updateTransaction(id, updates)
+    const transaction = await updateTransaction(session.user.id, id, updates)
     return NextResponse.json(transaction)
   } catch (error) {
     console.error('Error updating transaction:', error)
