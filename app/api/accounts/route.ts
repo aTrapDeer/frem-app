@@ -74,7 +74,7 @@ export async function PUT(request: Request) {
       return Response.json({ error: 'Account ID is required' }, { status: 400 })
     }
     
-    const account = await updateFinancialAccount(id, updates)
+    const account = await updateFinancialAccount(session.user.id, id, updates)
     
     return Response.json({ account, message: 'Account updated successfully' })
   } catch (error) {
@@ -98,7 +98,7 @@ export async function DELETE(request: Request) {
       return Response.json({ error: 'Account ID is required' }, { status: 400 })
     }
     
-    await deleteFinancialAccount(id)
+    await deleteFinancialAccount(session.user.id, id)
     
     return Response.json({ message: 'Account deleted successfully' })
   } catch (error) {

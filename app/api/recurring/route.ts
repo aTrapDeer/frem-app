@@ -50,7 +50,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, ...updates } = body
     
-    const expense = await updateRecurringExpense(id, updates)
+    const expense = await updateRecurringExpense(session.user.id, id, updates)
     return NextResponse.json(expense)
   } catch (error) {
     console.error('Error updating recurring expense:', error)

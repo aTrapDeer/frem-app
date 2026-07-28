@@ -82,6 +82,12 @@ export function Navbar() {
                   Budget
                 </Link>
                 <Link
+                  href="/accounts"
+                  className="text-sm text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
+                >
+                  Accounts
+                </Link>
+                <Link
                   href="/chat"
                   className="text-sm text-indigo-600 hover:text-indigo-700 focus-ring rounded transition-colors font-medium"
                 >
@@ -209,6 +215,13 @@ export function Navbar() {
                     onClick={() => setIsOpen(false)}
                   >
                     Budget
+                  </Link>
+                  <Link
+                    href="/accounts"
+                    className="block text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Accounts
                   </Link>
                   <Link
                     href="/chat"

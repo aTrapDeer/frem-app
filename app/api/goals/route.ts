@@ -50,7 +50,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, ...updates } = body
     
-    const goal = await updateGoal(id, updates)
+    const goal = await updateGoal(session.user.id, id, updates)
     return NextResponse.json(goal)
   } catch (error) {
     console.error('Error updating goal:', error)

@@ -1,4 +1,5 @@
 import { auth } from '@/auth'
+import { AI_REPORT_LIMIT, checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { 
   getAIFinancialReport, 
   createOrUpdateAIFinancialReport, 
@@ -233,6 +234,19 @@ export async function POST() {
     const session = await auth()
     if (!session?.user?.id) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Regeneration is the most expensive call in the app
+    const rateLimit = await checkRateLimit(session.user.id, AI_REPORT_LIMIT)
+
+    if (!rateLimit.allowed) {
+      return Response.json(
+        {
+          error: 'Rate limit exceeded',
+          details: `Try again after ${rateLimit.resetAt.toISOString()}`,
+        },
+        { status: 429, headers: rateLimitHeaders(rateLimit) }
+      )
     }
     
     // Check if OpenAI API key is configured

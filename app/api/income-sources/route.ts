@@ -7,6 +7,7 @@ import {
   deleteIncomeSource,
   getIncomeSummary
 } from '@/lib/database'
+import { describeAge, incomeEndsOn, isIncomeSourceActive } from '@/lib/freshness'
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +26,20 @@ export async function GET(request: NextRequest) {
     }
 
     const sources = await getIncomeSources(session.user.id)
-    return NextResponse.json(sources)
+
+    // Annotate rather than filter: a source that stopped counting because its
+    // contract lapsed should still be visible, with the reason attached
+    const annotated = sources.map(source => {
+      const endsOn = incomeEndsOn(source)
+      return {
+        ...source,
+        countsTowardIncome: isIncomeSourceActive(source),
+        endsOn: endsOn ? endsOn.toISOString().split('T')[0] : null,
+        lastUpdatedLabel: describeAge(source.updated_at),
+      }
+    })
+
+    return NextResponse.json(annotated)
   } catch (error) {
     console.error('Error fetching income sources:', error)
     return NextResponse.json({ error: 'Failed to fetch income sources' }, { status: 500 })
@@ -69,7 +83,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Missing income source ID' }, { status: 400 })
     }
 
-    const source = await updateIncomeSource(id, updates)
+    const source = await updateIncomeSource(session.user.id, id, updates)
     return NextResponse.json(source)
   } catch (error) {
     console.error('Error updating income source:', error)
@@ -92,7 +106,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Missing income source ID' }, { status: 400 })
     }
 
-    await deleteIncomeSource(id)
+    await deleteIncomeSource(session.user.id, id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting income source:', error)

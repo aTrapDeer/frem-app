@@ -4,6 +4,8 @@ import {
   getAIFinancialReport
 } from '@/lib/database'
 import OpenAI from 'openai'
+import { chatRequestSchema, parseBody } from '@/lib/validation'
+import { AI_CHAT_LIMIT, checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
 const MODEL_NAME = 'gpt-5.2-2025-12-11'
 
@@ -121,13 +123,27 @@ export async function POST(request: Request) {
       return Response.json({ error: 'OpenAI API key not configured' }, { status: 500 })
     }
     
-    const body = await request.json()
-    const { message, conversationHistory = [] } = body
-    
-    if (!message || typeof message !== 'string') {
-      return Response.json({ error: 'Message is required' }, { status: 400 })
+    const validated = await parseBody(request, chatRequestSchema)
+
+    if (!validated.ok) {
+      return Response.json({ error: validated.error, details: validated.details }, { status: 400 })
     }
-    
+
+    const { message, conversationHistory } = validated.data
+
+    // Bound cost before doing any paid work
+    const rateLimit = await checkRateLimit(session.user.id, AI_CHAT_LIMIT)
+
+    if (!rateLimit.allowed) {
+      return Response.json(
+        {
+          error: 'Rate limit exceeded',
+          details: `Try again after ${rateLimit.resetAt.toISOString()}`,
+        },
+        { status: 429, headers: rateLimitHeaders(rateLimit) }
+      )
+    }
+
     // Build financial context
     const context = await buildAIContext(session.user.id)
     const contextSummary = buildContextSummary(context)
@@ -154,10 +170,7 @@ export async function POST(request: Request) {
     // Add conversation history (limit to last 10 messages to stay within context limits)
     const recentHistory = conversationHistory.slice(-10)
     for (const msg of recentHistory) {
-      messages.push({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content
-      })
+      messages.push({ role: msg.role, content: msg.content })
     }
     
     // Add the new user message

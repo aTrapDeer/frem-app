@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         return Response.json({ error: 'Income ID and Goal ID are required' }, { status: 400 })
       }
       
-      const result = await applyOneTimeIncomeToGoal(income_id, goal_id)
+      const result = await applyOneTimeIncomeToGoal(session.user.id, income_id, goal_id)
       
       return Response.json({ 
         ...result, 
@@ -106,7 +106,7 @@ export async function PUT(request: Request) {
       return Response.json({ error: 'Income ID is required' }, { status: 400 })
     }
     
-    const income = await updateOneTimeIncome(id, updates)
+    const income = await updateOneTimeIncome(session.user.id, id, updates)
     
     return Response.json({ income, message: 'One-time income updated successfully' })
   } catch (error) {
@@ -130,7 +130,7 @@ export async function DELETE(request: Request) {
       return Response.json({ error: 'Income ID is required' }, { status: 400 })
     }
     
-    await deleteOneTimeIncome(id)
+    await deleteOneTimeIncome(session.user.id, id)
     
     return Response.json({ message: 'One-time income deleted successfully' })
   } catch (error) {
