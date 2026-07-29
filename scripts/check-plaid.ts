@@ -44,6 +44,7 @@ async function main() {
       products: ['transactions'],
       country_codes: ['US'],
       language: 'en',
+      transactions: { days_requested: 730 },
     }),
   })
 

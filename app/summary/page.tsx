@@ -67,6 +67,18 @@ interface ProjectionSummary {
   }
 }
 
+interface EntityView {
+  income: { measured: number | null; plan: number }
+  expenses: { measured: number | null; plan: number }
+  surplus: { value: number; basis: 'measured' | 'plan'; monthsOfData: number }
+}
+
+interface FinancialOverview {
+  netWorth: { net: number; accountCount: number }
+  entities: { personal: EntityView; business: EntityView | null }
+  hasBankData: boolean
+}
+
 interface MonthlyGoalProjection {
   goalId: string
   title: string
@@ -126,6 +138,14 @@ interface SideProject {
   description?: string
 }
 
+function BasisChip({ basis, monthsOfData }: { basis: 'measured' | 'plan'; monthsOfData: number }) {
+  if (basis === 'measured') {
+    return <span className="text-[10px] font-semibold uppercase tracking-wide bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">measured · {monthsOfData} mo</span>
+  }
+
+  return <span className="text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">planned</span>
+}
+
 export default function SummaryPage() {
   const { user, userSettings } = useAuth()
   const [showBubbleMap, setShowBubbleMap] = useState(false)
@@ -150,6 +170,7 @@ export default function SummaryPage() {
     hasCommissionIncome: boolean 
   } | null>(null)
   const [projections, setProjections] = useState<ProjectionSummary | null>(null)
+  const [overview, setOverview] = useState<FinancialOverview | null>(null)
   const [monthlyProjections, setMonthlyProjections] = useState<MonthlyProjection[]>([])
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0)
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -165,10 +186,11 @@ export default function SummaryPage() {
         
         // Fetch all user financial data from summary API and projections
         // Only fetch 12 months initially for faster load
-        const [summaryRes, projectionsRes, monthlyRes] = await Promise.all([
+        const [summaryRes, projectionsRes, monthlyRes, overviewRes] = await Promise.all([
           fetch('/api/summary'),
           fetch('/api/projections'),
-          fetch('/api/projections/monthly?months=12')
+          fetch('/api/projections/monthly?months=12'),
+          fetch('/api/overview').catch(() => null)
         ])
         
         if (!summaryRes.ok) throw new Error('Failed to fetch summary data')
@@ -191,6 +213,11 @@ export default function SummaryPage() {
         if (projectionsRes.ok) {
           const projectionsData = await projectionsRes.json()
           setProjections(projectionsData)
+        }
+
+        if (overviewRes?.ok) {
+          const overviewData = await overviewRes.json() as FinancialOverview
+          setOverview(overviewData)
         }
         
         if (monthlyRes.ok) {
@@ -250,9 +277,20 @@ export default function SummaryPage() {
   const monthlyIncome = selectedMonth?.financials.totalMonthlyIncome || targetData?.estimatedMonthlyIncome || incomeSummary?.totalMonthlyMid || 0
   const monthlyExpenses = selectedMonth?.financials.totalMonthlyExpenses || targetData?.monthlyRecurringTotal || 0
   const monthlySurplus = selectedMonth?.financials.monthlySurplus || targetData?.monthlySurplusDeficit || (monthlyIncome - monthlyExpenses)
+  const personalOverview = overview?.entities.personal
+  const measuredIncome = personalOverview?.income.measured
+  const measuredSavingsRate = personalOverview?.surplus.basis === 'measured' && measuredIncome !== null && measuredIncome !== undefined && measuredIncome > 0
+    ? Math.round((personalOverview.surplus.value / measuredIncome) * 100)
+    : null
+  const hasMeasuredSavingsRate = measuredSavingsRate !== null
+  const displayedMonthlyIncome = personalOverview?.income.measured ?? personalOverview?.income.plan ?? monthlyIncome
+  const displayedMonthlySurplus = personalOverview?.surplus.value ?? monthlySurplus
+  const plannedMonthlySurplus = personalOverview
+    ? personalOverview.income.plan - personalOverview.expenses.plan
+    : monthlySurplus
   
   // Calculate savings rate (percentage of income saved/available after expenses)
-  const savingsRate = selectedMonth?.financials.savingsRate || (monthlyIncome > 0 ? Math.round((monthlySurplus / monthlyIncome) * 100) : 0)
+  const savingsRate = measuredSavingsRate ?? (selectedMonth?.financials.savingsRate || (monthlyIncome > 0 ? Math.round((monthlySurplus / monthlyIncome) * 100) : 0))
   
   // Calculate average goal progress from selected month or projections
   const goalProgress = selectedMonth?.summary.totalGoalProgress 
@@ -271,14 +309,19 @@ export default function SummaryPage() {
     // Dynamic metrics based on selected month
     savingsRate,
     goalProgress,
-    monthlySurplus,
+    monthlySurplus: displayedMonthlySurplus,
     avgMonthsToGoals,
     // Financial health metrics from target calculation
-    monthlyObligations: selectedMonth?.financials.totalAllocatedToGoals || targetData?.totalMonthlyObligations || 0,
-    monthlyIncome,
+    // Obligations = goal requirements + recurring expenses, always from the
+    // daily-target calculation. The previous fallback chain grabbed
+    // totalAllocatedToGoals — the SURPLUS allocated to goals — whenever a month
+    // was selected, so "Obligations" and "Surplus" rendered the same number
+    // with different labels.
+    monthlyObligations: targetData?.totalMonthlyObligations || 0,
+    monthlyIncome: displayedMonthlyIncome,
     dailyTarget: targetData?.dailyTarget || 0,
-    financialHealth: monthlySurplus >= 0 ? 'positive' : 'negative',
-    surplus: monthlySurplus,
+    financialHealth: displayedMonthlySurplus >= 0 ? 'positive' : 'negative',
+    surplus: displayedMonthlySurplus,
     activeGoals: selectedMonth?.summary.activeGoalsCount || targetData?.activeGoalsCount || 0,
     recurringExpenses: targetData?.recurringExpensesCount || 0,
   }
@@ -478,8 +521,14 @@ export default function SummaryPage() {
                   <TrendingUp className="h-4 w-4 text-slate-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold font-numbers ${kpis.savingsRate >= 20 ? 'text-green-600' : kpis.savingsRate >= 10 ? 'text-amber-600' : kpis.savingsRate >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-                    {kpis.savingsRate}%
+                  <div className={`flex items-center gap-2 text-2xl font-bold font-numbers ${kpis.savingsRate >= 20 ? 'text-green-600' : kpis.savingsRate >= 10 ? 'text-amber-600' : kpis.savingsRate >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                    <span>{kpis.savingsRate}%</span>
+                    {personalOverview && (
+                      <BasisChip
+                        basis={hasMeasuredSavingsRate ? 'measured' : 'plan'}
+                        monthsOfData={personalOverview.surplus.monthsOfData}
+                      />
+                    )}
                   </div>
                   <p className="text-xs text-slate-600 flex items-center mt-1">
                     {kpis.savingsRate >= 20 ? '🎉 Great!' : kpis.savingsRate >= 10 ? '👍 Good' : kpis.savingsRate >= 0 ? '⚠️ Low' : '🚨 Deficit'} of income saved
@@ -527,11 +576,21 @@ export default function SummaryPage() {
                   <DollarSign className={`h-4 w-4 ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`} />
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold font-numbers ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {kpis.monthlySurplus >= 0 ? '+' : ''}${Math.abs(Math.round(kpis.monthlySurplus)).toLocaleString()}
+                  <div className={`flex items-center gap-2 text-2xl font-bold font-numbers ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span>{kpis.monthlySurplus >= 0 ? '+' : ''}${Math.abs(Math.round(kpis.monthlySurplus)).toLocaleString()}</span>
+                    {personalOverview && (
+                      <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} />
+                    )}
                   </div>
+                  {personalOverview?.surplus.basis === 'measured' && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      planned {plannedMonthlySurplus >= 0 ? '+' : ''}${Math.abs(Math.round(plannedMonthlySurplus)).toLocaleString()}
+                    </p>
+                  )}
                   <p className="text-xs text-slate-600 mt-1">
-                    {selectedMonth && selectedMonthIndex > 0 
+                    {personalOverview?.surplus.basis === 'measured' && kpis.monthlySurplus < 0
+                      ? 'Spending more than you earn'
+                      : selectedMonth && selectedMonthIndex > 0
                       ? `allocated to ${kpis.activeGoals} goals`
                       : kpis.avgMonthsToGoals > 0 ? `~${kpis.avgMonthsToGoals} mo to goals` : 'after expenses'}
                   </p>
@@ -542,7 +601,7 @@ export default function SummaryPage() {
 
           {/* Financial KPIs */}
           {targetData && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -554,7 +613,18 @@ export default function SummaryPage() {
                     <DollarSign className="h-4 w-4 text-green-600" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold font-numbers text-slate-900">${kpis.monthlyIncome.toLocaleString()}</div>
+                    <div className="flex items-center gap-2 text-2xl font-bold font-numbers text-slate-900">
+                      <span>${kpis.monthlyIncome.toLocaleString()}</span>
+                      {personalOverview && (
+                        <BasisChip
+                          basis={personalOverview.income.measured !== null ? 'measured' : 'plan'}
+                          monthsOfData={personalOverview.surplus.monthsOfData}
+                        />
+                      )}
+                    </div>
+                    {personalOverview?.income.measured !== null && personalOverview?.income.measured !== undefined && (
+                      <p className="text-xs text-slate-500 mt-1">planned ${personalOverview.income.plan.toLocaleString()}</p>
+                    )}
                     <p className="text-xs text-slate-600 mt-1">
                       From all sources
                     </p>
@@ -588,15 +658,25 @@ export default function SummaryPage() {
               >
                 <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-slate-600">Monthly {kpis.surplus >= 0 ? 'Surplus' : 'Deficit'}</CardTitle>
+                    <CardTitle className="text-sm font-medium text-slate-600">{personalOverview ? 'Monthly Surplus' : `Monthly ${kpis.surplus >= 0 ? 'Surplus' : 'Deficit'}`}</CardTitle>
                     {kpis.surplus >= 0 ? <TrendingUp className="h-4 w-4 text-green-600" /> : <TrendingDown className="h-4 w-4 text-red-600" />}
                   </CardHeader>
                   <CardContent>
-                    <div className={`text-2xl font-bold font-numbers ${kpis.surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {kpis.surplus >= 0 ? '+' : ''}${kpis.surplus.toLocaleString()}
+                    <div className={`flex items-center gap-2 text-2xl font-bold font-numbers ${kpis.surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <span>{kpis.surplus >= 0 ? '+' : ''}${Math.abs(Math.round(kpis.surplus)).toLocaleString()}</span>
+                      {personalOverview && (
+                        <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} />
+                      )}
                     </div>
+                    {personalOverview?.surplus.basis === 'measured' && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        planned {plannedMonthlySurplus >= 0 ? '+' : ''}${Math.abs(Math.round(plannedMonthlySurplus)).toLocaleString()}
+                      </p>
+                    )}
                     <p className="text-xs text-slate-600 mt-1">
-                      {kpis.surplus >= 0 ? 'Extra to invest' : 'Need more income'}
+                      {personalOverview?.surplus.basis === 'measured' && kpis.surplus < 0
+                        ? 'Spending more than you earn'
+                        : kpis.surplus >= 0 ? 'Extra to invest' : 'Need more income'}
                     </p>
                   </CardContent>
                 </Card>
@@ -620,6 +700,29 @@ export default function SummaryPage() {
                   </CardContent>
                 </Card>
               </motion.div>
+
+              {overview?.hasBankData && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.8 }}
+                >
+                  <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-slate-600">Net (linked accounts)</CardTitle>
+                      <CreditCard className="h-4 w-4 text-slate-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className={`text-2xl font-bold font-numbers ${overview.netWorth.net >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                        {overview.netWorth.net >= 0 ? '' : '-'}${Math.abs(Math.round(overview.netWorth.net)).toLocaleString()}
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1">
+                        {overview.netWorth.accountCount} linked {overview.netWorth.accountCount === 1 ? 'account' : 'accounts'}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
             </div>
           )}
 

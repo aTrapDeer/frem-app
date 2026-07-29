@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { motion, AnimatePresence } from "framer-motion"
-import { Menu, X, User, Settings, LogOut, ChevronDown } from "lucide-react"
+import { Menu, X, User, Settings, LogOut, ChevronDown, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
 import { LoginModal } from "@/components/login-modal"
@@ -76,10 +76,10 @@ export function Navbar() {
                   Goals
                 </Link>
                 <Link
-                  href="/recurring"
+                  href="/money"
                   className="text-sm text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
                 >
-                  Budget
+                  Money
                 </Link>
                 <Link
                   href="/accounts"
@@ -143,6 +143,14 @@ export function Navbar() {
                           <Settings className="h-4 w-4 mr-2" />
                           Settings
                         </button>
+                        <Link
+                          href="/setup"
+                          onClick={() => setAccountOpen(false)}
+                          className="flex items-center w-full px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Setup guide
+                        </Link>
                         <button 
                           onClick={handleSignOut}
                           className="flex items-center w-full px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
@@ -210,11 +218,11 @@ export function Navbar() {
                     Goals
                   </Link>
                   <Link
-                    href="/recurring"
+                    href="/money"
                     className="block text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
                     onClick={() => setIsOpen(false)}
                   >
-                    Budget
+                    Money
                   </Link>
                   <Link
                     href="/accounts"

@@ -31,6 +31,7 @@ export type RateLimitRule = {
 /** Per-user budgets for the routes that cost real money. */
 export const AI_CHAT_LIMIT: RateLimitRule = { bucket: 'ai-chat', limit: 40, windowSeconds: 60 * 60 }
 export const AI_REPORT_LIMIT: RateLimitRule = { bucket: 'ai-report', limit: 10, windowSeconds: 60 * 60 }
+export const AI_CLASSIFY_LIMIT: RateLimitRule = { bucket: 'ai-classify', limit: 10, windowSeconds: 3600 }
 export const BANK_SYNC_LIMIT: RateLimitRule = { bucket: 'bank-sync', limit: 20, windowSeconds: 60 * 60 }
 
 function windowStartFor(rule: RateLimitRule, now: Date): Date {
