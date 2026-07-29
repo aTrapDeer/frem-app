@@ -295,6 +295,12 @@ export default function HomePage() {
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </motion.div>
+          <motion.p {...rise} className="mt-5 text-sm text-slate-500">
+            Free for 14 days, then from $9.99 a month.{' '}
+            <a href="/pricing" className="text-slate-300 hover:text-white underline underline-offset-4 decoration-slate-600">
+              See pricing
+            </a>
+          </motion.p>
         </div>
       </section>
 
@@ -351,9 +357,12 @@ function BudgetMini() {
 
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between text-xs text-slate-500">
-        <span className="font-medium">July</span>
-        <span>planned · actual · difference</span>
+      {/* One grid shared by header and rows, so every column truly lines up */}
+      <div className="grid grid-cols-[1fr_64px_64px_72px] gap-x-3 px-4 py-2.5 border-b border-slate-100 text-xs text-slate-500">
+        <span className="font-medium text-slate-700">July</span>
+        <span className="text-right">planned</span>
+        <span className="text-right">actual</span>
+        <span className="text-right">diff</span>
       </div>
       <div className="divide-y divide-slate-100">
         {rows.map((row, index) => {
@@ -365,17 +374,17 @@ function BudgetMini() {
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.4, delay: index * 0.07 }}
-              className="px-4 py-3 flex items-center justify-between text-sm"
+              className="grid grid-cols-[1fr_64px_64px_72px] gap-x-3 px-4 py-3 text-sm items-baseline"
             >
-              <span className="text-slate-800">{row.label}</span>
-              <span className="tabular-nums text-slate-500">
-                ${row.planned}
-                <span className="mx-2 text-slate-300">·</span>
-                <span className="text-slate-900 font-medium">${row.actual}</span>
-                <span className="mx-2 text-slate-300">·</span>
-                <span className={over ? 'text-amber-700 font-medium' : 'text-emerald-700 font-medium'}>
-                  {over ? '+' : '−'}${Math.abs(row.actual - row.planned)}
-                </span>
+              <span className="text-slate-800 truncate">{row.label}</span>
+              <span className="text-right tabular-nums text-slate-400">${row.planned}</span>
+              <span className="text-right tabular-nums text-slate-900 font-medium">${row.actual}</span>
+              <span
+                className={`text-right tabular-nums font-medium ${
+                  over ? 'text-amber-700' : 'text-emerald-700'
+                }`}
+              >
+                {over ? '+' : '−'}${Math.abs(row.actual - row.planned)}
               </span>
             </motion.div>
           )

@@ -165,6 +165,13 @@ export function Navbar() {
               </div>
             ) : (
               /* Get Started button for unauthenticated users */
+              <>
+              <Link
+                href="/pricing"
+                className="text-sm text-slate-600 hover:text-slate-900 focus-ring rounded transition-colors"
+              >
+                Pricing
+              </Link>
               <Button
                 onClick={() => setLoginModalOpen(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white btn-press"
@@ -172,6 +179,7 @@ export function Navbar() {
               >
                 {isLoading ? 'Loading...' : 'Get Started'}
               </Button>
+              </>
             )}
           </div>
 
