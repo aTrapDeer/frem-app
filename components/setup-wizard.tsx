@@ -45,6 +45,7 @@ type StepId =
   | 'income'
   | 'tax'
   | 'spending'
+  | 'bills'
   | 'investments'
   | 'debts'
   | 'goals'
@@ -55,6 +56,17 @@ interface IncomeRow {
   name: string
   amount: string
   entity: Entity
+  /** Set after a successful save — re-advancing must never post the row twice. */
+  saved?: boolean
+}
+
+interface BillRow {
+  name: string
+  amount: string
+  day: string
+  category: 'housing' | 'utilities' | 'entertainment' | 'health' | 'transportation' | 'food' | 'subscriptions' | 'insurance' | 'other'
+  entity: Entity
+  saved?: boolean
 }
 
 interface InvestmentRow {
@@ -85,6 +97,7 @@ interface Answers {
   filingStatus: 'single' | 'married_joint' | null
   taxState: string
   estimates: Record<string, string>
+  bills: BillRow[]
   investments: InvestmentRow[]
   liabilities: LiabilityRow[]
   goals: Record<string, GoalPick>
@@ -150,6 +163,7 @@ const DEFAULT_ANSWERS: Answers = {
   filingStatus: null,
   taxState: '',
   estimates: {},
+  bills: [{ name: 'Rent', amount: '', day: '1', category: 'housing', entity: 'personal' }],
   investments: [],
   liabilities: [],
   goals: {
@@ -238,7 +252,7 @@ export function SetupWizard() {
   const steps: StepId[] = useMemo(() => {
     const list: StepId[] = ['welcome', 'earn']
     if (hasBusiness) list.push('business')
-    list.push('income', 'tax', 'spending', 'investments', 'debts', 'goals', 'link', 'done')
+    list.push('income', 'tax', 'spending', 'bills', 'investments', 'debts', 'goals', 'link', 'done')
     return list
   }, [hasBusiness])
 
@@ -271,9 +285,14 @@ export function SetupWizard() {
     }
 
     if (leaving === 'income') {
-      const rows = answers.incomeRows.filter(row => row.name.trim() && Number(row.amount) > 0)
+      // Only rows never saved before — going back and continuing again used to
+      // create a duplicate income source on every pass
+      const rows = answers.incomeRows.filter(
+        row => !row.saved && row.name.trim() && Number(row.amount) > 0
+      )
+      const savedNames: string[] = []
       for (const row of rows) {
-        await post('/api/income-sources', {
+        const ok = await post('/api/income-sources', {
           name: row.name.trim(),
           income_type: row.entity === 'business' ? 'business' : 'salary',
           pay_frequency: 'monthly',
@@ -282,6 +301,40 @@ export function SetupWizard() {
           is_primary: rows.indexOf(row) === 0 && (prefill?.incomeSourceCount ?? 0) === 0,
           status: 'active',
         })
+        if (ok) savedNames.push(row.name)
+      }
+      if (savedNames.length > 0) {
+        setAnswers(a => ({
+          ...a,
+          incomeRows: a.incomeRows.map(row =>
+            savedNames.includes(row.name) ? { ...row, saved: true } : row
+          ),
+        }))
+      }
+    }
+
+    if (leaving === 'bills') {
+      const rows = answers.bills.filter(
+        row => !row.saved && row.name.trim() && Number(row.amount) > 0
+      )
+      const savedNames: string[] = []
+      for (const row of rows) {
+        const ok = await post('/api/recurring', {
+          name: row.name.trim(),
+          amount: Number(row.amount),
+          category: row.category,
+          due_date: Math.min(Math.max(Number(row.day) || 1, 1), 28),
+          entity: row.entity,
+        })
+        if (ok) savedNames.push(row.name)
+      }
+      if (savedNames.length > 0) {
+        setAnswers(a => ({
+          ...a,
+          bills: a.bills.map(row =>
+            savedNames.includes(row.name) ? { ...row, saved: true } : row
+          ),
+        }))
       }
     }
 
@@ -476,6 +529,7 @@ export function SetupWizard() {
               {step === 'spending' && (
                 <SpendingStep answers={answers} setAnswers={setAnswers} prefill={prefill} />
               )}
+              {step === 'bills' && <BillsStep answers={answers} setAnswers={setAnswers} hasBusiness={hasBusiness} />}
               {step === 'investments' && (
                 <InvestmentsStep answers={answers} setAnswers={setAnswers} prefill={prefill} />
               )}
@@ -937,6 +991,122 @@ function SpendingStep({
       </div>
 
       <p className="text-xs text-slate-400 mt-4">Leave blank anything you don&apos;t spend on.</p>
+    </div>
+  )
+}
+
+const BILL_CATEGORIES = [
+  'housing', 'utilities', 'subscriptions', 'insurance', 'transportation',
+  'food', 'health', 'entertainment', 'other',
+] as const
+
+function BillsStep({
+  answers,
+  setAnswers,
+  hasBusiness,
+}: {
+  answers: Answers
+  setAnswers: React.Dispatch<React.SetStateAction<Answers>>
+  hasBusiness: boolean
+}) {
+  const update = (index: number, patch: Partial<BillRow>) =>
+    setAnswers(a => ({
+      ...a,
+      bills: a.bills.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    }))
+
+  return (
+    <div>
+      <StepHeader
+        icon={Landmark}
+        title="Your fixed monthly bills"
+        subtitle="Rent, insurance, the subscriptions you actually keep — the predictable stuff with a name and a date."
+      />
+
+      <div className="space-y-3">
+        {answers.bills.map((row, index) => (
+          <div key={index} className="flex gap-2 items-end flex-wrap">
+            <div className="space-y-1.5 flex-1 min-w-[110px]">
+              <Label className="text-slate-700 text-xs">Bill</Label>
+              <Input
+                placeholder="e.g. Rent"
+                value={row.name}
+                disabled={row.saved}
+                onChange={event => update(index, { name: event.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5 w-24">
+              <Label className="text-slate-700 text-xs">$ / month</Label>
+              <Input
+                inputMode="decimal"
+                placeholder="0"
+                value={row.amount}
+                disabled={row.saved}
+                onChange={event => update(index, { amount: event.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5 w-16">
+              <Label className="text-slate-700 text-xs">Day</Label>
+              <Input
+                inputMode="numeric"
+                placeholder="1"
+                value={row.day}
+                disabled={row.saved}
+                onChange={event => update(index, { day: event.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-700 text-xs">Category</Label>
+              <select
+                value={row.category}
+                disabled={row.saved}
+                onChange={event => update(index, { category: event.target.value as BillRow['category'] })}
+                className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm disabled:opacity-60"
+              >
+                {BILL_CATEGORIES.map(option => (
+                  <option key={option} value={option}>
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {hasBusiness && !row.saved && (
+              <div className="inline-flex p-0.5 bg-slate-100 rounded-md mb-0.5">
+                {(['personal', 'business'] as const).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => update(index, { entity: option })}
+                    className={`px-2 py-1.5 rounded text-xs font-medium transition-all ${
+                      row.entity === option ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                    }`}
+                  >
+                    {option === 'personal' ? 'Personal' : 'Business'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {row.saved && <Check className="w-4 h-4 text-emerald-600 mb-2.5" />}
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          setAnswers(a => ({
+            ...a,
+            bills: [...a.bills, { name: '', amount: '', day: '1', category: 'other', entity: 'personal' }],
+          }))
+        }
+        className="text-sm text-blue-600 hover:text-blue-700 mt-3"
+      >
+        + Add a bill
+      </button>
+
+      <p className="text-xs text-slate-400 mt-4">
+        These become named items in your budget — measured against what your bank actually shows.
+      </p>
     </div>
   )
 }
