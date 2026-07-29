@@ -7,6 +7,13 @@ import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { LoginModal } from "@/components/login-modal"
 import { LedgerFlow } from "@/components/landing/ledger-flow"
+import dynamic from "next/dynamic"
+
+// three.js is ~150KB — loaded after paint, skipped entirely for
+// prefers-reduced-motion inside the component
+const MoneyField = dynamic(() => import("@/components/landing/money-field"), {
+  ssr: false,
+})
 import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Check } from "lucide-react"
@@ -51,78 +58,85 @@ export default function HomePage() {
     <div className="min-h-screen bg-white">
       <Navbar />
 
-      {/* ── Hero ─────────────────────────────────────────── */}
-      <section className="pt-36 pb-16">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-[1.1fr_1fr] gap-14 items-center">
-            <div>
-              <motion.h1
-                initial={{ opacity: 0, y: 28 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                style={display}
-                className="text-5xl sm:text-6xl lg:text-7xl font-bold text-slate-950 leading-[1.02] tracking-[-0.02em]"
-              >
-                Your money,
-                <br />
-                measured.
-              </motion.h1>
+      {/* ── Hero: ink slab, money field flowing behind ───── */}
+      <section className="pt-24 pb-10 px-3 sm:px-5">
+        <div className="max-w-7xl mx-auto relative overflow-hidden rounded-xl bg-slate-950">
+          {/* The 3D field: a few thousand transactions drifting along a rising current */}
+          <MoneyField className="absolute inset-0" />
+          {/* Legibility scrim over the text column only */}
+          <div className="absolute inset-y-0 left-0 w-full lg:w-3/5 bg-gradient-to-r from-slate-950/85 via-slate-950/45 to-transparent pointer-events-none" />
 
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-6 text-lg text-slate-600 max-w-md leading-relaxed"
-              >
-                FREM links your accounts, sorts personal from business, and shows
-                what you actually spent beside what you planned to.
-              </motion.p>
+          <div className="relative px-6 sm:px-10 lg:px-14 py-16 sm:py-20 lg:py-24">
+            <div className="grid lg:grid-cols-[1.1fr_1fr] gap-14 items-center">
+              <div>
+                <motion.h1
+                  initial={{ opacity: 0, y: 28 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                  style={display}
+                  className="text-5xl sm:text-6xl lg:text-7xl font-bold text-white leading-[1.02] tracking-[-0.02em]"
+                >
+                  Your money,
+                  <br />
+                  measured.
+                </motion.h1>
+
+                <motion.p
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+                  className="mt-6 text-lg text-slate-300 max-w-md leading-relaxed"
+                >
+                  FREM links your accounts, sorts personal from business, and shows
+                  what you actually spent beside what you planned to.
+                </motion.p>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  className="mt-9 flex items-center gap-4 flex-wrap"
+                >
+                  <Button
+                    onClick={start}
+                    size="lg"
+                    className="bg-white hover:bg-slate-100 text-slate-950 h-12 px-7 text-base"
+                  >
+                    Start with your bank
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                  <a
+                    href="#how"
+                    className="text-base text-slate-300 hover:text-white transition-colors underline underline-offset-4 decoration-slate-600"
+                  >
+                    How it works
+                  </a>
+                </motion.div>
+
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.8, delay: 0.45 }}
+                  className="mt-6 text-sm text-slate-500"
+                >
+                  Read-only bank access. FREM can see balances and transactions.
+                  It can never move money.
+                </motion.p>
+              </div>
 
               <motion.div
-                initial={{ opacity: 0, y: 16 }}
+                initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-9 flex items-center gap-4 flex-wrap"
+                transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="rounded-lg bg-white border border-slate-200 shadow-2xl shadow-slate-950/40"
               >
-                <Button
-                  onClick={start}
-                  size="lg"
-                  className="bg-slate-950 hover:bg-slate-800 text-white h-12 px-7 text-base"
-                >
-                  Start with your bank
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-                <a
-                  href="#how"
-                  className="text-base text-slate-600 hover:text-slate-950 transition-colors underline underline-offset-4 decoration-slate-300"
-                >
-                  How it works
-                </a>
+                <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-500">This month, as it happens</span>
+                  <span className="text-xs text-slate-400 tabular-nums">live</span>
+                </div>
+                <LedgerFlow className="w-full h-[340px] block" />
               </motion.div>
-
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.8, delay: 0.45 }}
-                className="mt-6 text-sm text-slate-400"
-              >
-                Read-only bank access. FREM can see balances and transactions.
-                It can never move money.
-              </motion.p>
             </div>
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.7, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              className="border border-slate-200 rounded-lg bg-white"
-            >
-              <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">This month, as it happens</span>
-                <span className="text-xs text-slate-400 tabular-nums">live</span>
-              </div>
-              <LedgerFlow className="w-full h-[380px] block" />
-            </motion.div>
           </div>
         </div>
       </section>
