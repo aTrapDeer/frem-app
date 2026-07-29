@@ -1,4 +1,6 @@
 import { auth } from '@/auth'
+import { getBusinessProfile } from '@/lib/business-profile'
+import { getFinancialOverview, type EntityView } from '@/lib/overview'
 import { AI_REPORT_LIMIT, checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { 
   getAIFinancialReport, 
@@ -19,6 +21,9 @@ Guidelines:
 - Acknowledge variable income challenges for commission-based earners
 - Prioritize emergency funds and debt payoff when relevant
 - Consider the user's specific goals and their deadlines
+- Measured figures outrank planned figures when they disagree; explicitly tell the user about the discrepancy
+- When a business exists and personal surplus is negative while business surplus is positive, address owner pay levels with concrete dollar amounts
+- Never present planned income as fact when measured income differs
 - Use simple language, avoid financial jargon
 - Structure your response clearly with sections
 - Provide a financial health score (0-100) based on their situation
@@ -74,6 +79,64 @@ IMPORTANT for growthOpportunities:
 - For expense_optimization: identify specific areas where they could reduce spending
 - Include actual percentage returns or dollar amounts where possible
 - Be realistic about risk and effort required`
+
+function formatEntityReality(label: string, entity: EntityView): string[] {
+  const measuredIncome =
+    entity.income.measured === null
+      ? 'unavailable'
+      : `$${entity.income.measured.toLocaleString()}`
+  const measuredExpenses =
+    entity.expenses.measured === null
+      ? 'unavailable'
+      : `$${entity.expenses.measured.toLocaleString()}`
+
+  return [
+    `${label}:`,
+    `- Income: measured ${measuredIncome}; planned $${entity.income.plan.toLocaleString()}`,
+    `- Expenses: measured ${measuredExpenses}; planned $${entity.expenses.plan.toLocaleString()}`,
+    `- Surplus: $${entity.surplus.value.toLocaleString()} (${entity.surplus.basis} basis, ${entity.surplus.monthsOfData} months of data)`,
+  ]
+}
+
+async function buildMeasuredReality(userId: string): Promise<string> {
+  let overview: Awaited<ReturnType<typeof getFinancialOverview>> | null = null
+  let profile: Awaited<ReturnType<typeof getBusinessProfile>> = null
+
+  try {
+    overview = await getFinancialOverview(userId)
+  } catch (error) {
+    console.error('Unable to add measured overview to AI report:', error)
+  }
+
+  try {
+    profile = await getBusinessProfile(userId)
+  } catch (error) {
+    console.error('Unable to add business profile to AI report:', error)
+  }
+
+  if (!overview) return ''
+
+  const lines = [
+    '',
+    '',
+    '**MEASURED REALITY**',
+    ...formatEntityReality('Personal', overview.entities.personal),
+  ]
+
+  if (overview.entities.business) {
+    lines.push(...formatEntityReality('Business', overview.entities.business))
+  }
+
+  lines.push(`Owner-pay transactions pending review: ${overview.ownerPay.pendingCount}`)
+
+  if (profile) {
+    lines.push(
+      `Business profile: type ${profile.business_type}; payment forms ${profile.payment_forms.join(', ') || 'none'}; ownership ${profile.ownership_percentage}%`
+    )
+  }
+
+  return lines.join('\n')
+}
 
 function generateUserPrompt(context: Awaited<ReturnType<typeof buildAIContext>>): string {
   const { incomeSources, goals, expenses, sideProjects, accounts, oneTimeIncome, oneTimeTransactions, metrics } = context
@@ -261,7 +324,9 @@ export async function POST() {
     const contextHash = generateFinancialContextHash(context._rawData)
     
     // Generate the prompt
-    const userPrompt = generateUserPrompt(context)
+    const userPrompt =
+      generateUserPrompt(context) +
+      await buildMeasuredReality(session.user.id)
     
     // Call OpenAI API
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })

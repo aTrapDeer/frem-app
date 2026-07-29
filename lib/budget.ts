@@ -1,6 +1,6 @@
 import { db, generateUUID, getCurrentTimestamp } from '@/lib/turso'
 import { getMonthStart, addMonths, toCents } from '@/lib/projections'
-import { findInternalTransfers, getLedger } from '@/lib/ledger'
+import { excludeHouseholdMovement, findInternalTransfers, getLedger } from '@/lib/ledger'
 import type { Entity } from '@/lib/bank-sync'
 
 /**
@@ -59,7 +59,15 @@ export function normalizeCategory(value: string | null | undefined): string {
   return value.toLowerCase().replace(/[\s>]+/g, '_').replace(/_+/g, '_').trim()
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  food: 'Food & Dining',
+  groceries: 'Groceries',
+  owner_pay: 'Owner pay',
+}
+
 export function categoryLabel(value: string): string {
+  if (CATEGORY_LABELS[value]) return CATEGORY_LABELS[value]
+
   return value
     .split('_')
     .filter(Boolean)
@@ -101,6 +109,9 @@ const PLAID_TO_APP: Record<string, string> = {
  * comfortably under budget — the opposite of the truth.
  */
 const PLAID_DETAILED_TO_APP: Record<string, string> = {
+  // Groceries are a planned staple; dining out is discretionary. Plaid's
+  // primary category merges them, which made a grocery budget impossible.
+  food_and_drink_groceries: 'groceries',
   rent_and_utilities_rent: 'housing',
   rent_and_utilities_telephone: 'utilities',
   rent_and_utilities_internet_and_cable: 'utilities',
@@ -218,7 +229,11 @@ export async function getBudgetTree(
   // Moving money between your own accounts is not spending. Without this a
   // transfer to savings appears as a budget overrun.
   const internal = findInternalTransfers(entries)
-  const spend = entries.filter(
+  // Household view: owner pay is pocket-to-pocket movement, not a spend category
+  const visible = entity
+    ? entries
+    : excludeHouseholdMovement(entries)
+  const spend = visible.filter(
     entry => entry.type === 'expense' && !internal.has(entry.id) && !isMovement(entry.category)
   )
   const hasActuals = entries.some(entry => entry.source === 'synced')

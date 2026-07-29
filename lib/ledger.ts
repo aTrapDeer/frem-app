@@ -38,6 +38,8 @@ export type LedgerEntry = {
   pending: boolean
   /** Only meaningful for synced rows; tells the UI whether to offer review. */
   classificationSource: string | null
+  /** null | 'pending' | 'salary' | 'distribution' — set by the owner-pay flow. */
+  ownerPayType: string | null
 }
 
 export type LedgerFilters = {
@@ -92,7 +94,7 @@ export async function getLedger(userId: string, filters: LedgerFilters = {}): Pr
   const syncedRange = buildRangeClause(filters)
   let syncedSql = `SELECT id, account_id, date, name, merchant_name, amount, category,
                           provider_category, provider_category_detailed, entity, entity_label,
-                          pending, classification_source
+                          pending, classification_source, owner_pay_type
                    FROM bank_transactions WHERE user_id = ?${syncedRange.clause}`
   const syncedArgs: (string | number)[] = [userId, ...syncedRange.args]
 
@@ -126,6 +128,7 @@ export async function getLedger(userId: string, filters: LedgerFilters = {}): Pr
       accountId: (record.account_id as string | null) ?? null,
       pending: Boolean(record.pending),
       classificationSource: (record.classification_source as string | null) ?? null,
+      ownerPayType: (record.owner_pay_type as string | null) ?? null,
     })
   }
 
@@ -161,6 +164,7 @@ export async function getLedger(userId: string, filters: LedgerFilters = {}): Pr
         accountId: null,
         pending: false,
         classificationSource: null,
+        ownerPayType: null,
       })
     }
   }
@@ -221,6 +225,49 @@ function isTransfer(entry: LedgerEntry): boolean {
   return TRANSFER_CATEGORIES.has((entry.category ?? '').toUpperCase())
 }
 
+export type TransferPair = {
+  outflow: LedgerEntry
+  inflow: LedgerEntry
+  daysApart: number
+}
+
+function findMatchedTransferPairs(entries: LedgerEntry[], toleranceDays: number): TransferPair[] {
+  const pairs: TransferPair[] = []
+  const outflows = entries.filter(entry => isTransfer(entry) && entry.type === 'expense')
+  const inflows = entries.filter(entry => isTransfer(entry) && entry.type === 'income')
+  const claimed = new Set<string>()
+
+  for (const outflow of outflows) {
+    const inflow = inflows.find(candidate => {
+      if (claimed.has(candidate.id)) return false
+      if (candidate.accountId && outflow.accountId && candidate.accountId === outflow.accountId) {
+        return false
+      }
+      if (Math.abs(candidate.amount - outflow.amount) > 0.01) return false
+
+      const daysApart = Math.abs(
+        (new Date(candidate.date).getTime() - new Date(outflow.date).getTime()) / 86_400_000
+      )
+      return daysApart <= toleranceDays
+    })
+
+    if (!inflow) continue
+
+    claimed.add(inflow.id)
+    pairs.push({
+      outflow,
+      inflow,
+      daysApart: Math.round(
+        Math.abs(
+          (new Date(inflow.date).getTime() - new Date(outflow.date).getTime()) / 86_400_000
+        )
+      ),
+    })
+  }
+
+  return pairs
+}
+
 /**
  * Identifies transfers between the user's own linked accounts.
  *
@@ -228,39 +275,55 @@ function isTransfer(entry: LedgerEntry): boolean {
  * leaving one account and arriving in another — so counting it inflates both
  * income and expenses and leaves the surplus meaningless.
  *
- * Only *matched* pairs are excluded. A transfer with no counterpart is money
- * genuinely entering or leaving the linked set — wages arriving from an
- * employer, or a payment out to an account that is not connected — and removing
- * those would understate real income.
+ * Only matched pairs within the same entity are excluded. Cross-entity movement
+ * is owner pay: an expense to the business and income to the person.
  */
 export function findInternalTransfers(entries: LedgerEntry[], toleranceDays = 4): Set<string> {
   const internal = new Set<string>()
 
-  const outflows = entries.filter(entry => isTransfer(entry) && entry.type === 'expense')
-  const inflows = entries.filter(entry => isTransfer(entry) && entry.type === 'income')
-  const claimed = new Set<string>()
-
-  for (const out of outflows) {
-    const match = inflows.find(inflow => {
-      if (claimed.has(inflow.id)) return false
-      // A transfer to yourself lands in a different account
-      if (inflow.accountId && out.accountId && inflow.accountId === out.accountId) return false
-      if (Math.abs(inflow.amount - out.amount) > 0.01) return false
-
-      const daysApart = Math.abs(
-        (new Date(inflow.date).getTime() - new Date(out.date).getTime()) / 86_400_000
-      )
-      return daysApart <= toleranceDays
-    })
-
-    if (match) {
-      claimed.add(match.id)
-      internal.add(out.id)
-      internal.add(match.id)
-    }
+  for (const pair of findMatchedTransferPairs(entries, toleranceDays)) {
+    if (pair.outflow.entity !== pair.inflow.entity) continue
+    internal.add(pair.outflow.id)
+    internal.add(pair.inflow.id)
   }
 
   return internal
+}
+
+/** Matched transfers crossing the personal/business boundary need confirmation as owner pay. */
+export function findOwnerPayCandidates(entries: LedgerEntry[], toleranceDays = 4): TransferPair[] {
+  return findMatchedTransferPairs(entries, toleranceDays).filter(
+    pair => pair.outflow.entity !== pair.inflow.entity
+  )
+}
+
+/**
+ * Removes owner-pay from a COMBINED (household) view.
+ *
+ * Owner pay is real at entity scope — a business expense and personal income —
+ * but at household scope it is the same dollars changing pockets. Counting it
+ * inflated combined income and spending by the full transfer amount each way
+ * and produced an "Owner Pay" spending category in the All view.
+ *
+ * Confirmed owner-pay rows are excluded directly; unconfirmed candidates are
+ * excluded as matched pairs so pending review does not distort totals either.
+ */
+export function excludeHouseholdMovement(entries: LedgerEntry[]): LedgerEntry[] {
+  const excluded = new Set<string>()
+
+  for (const entry of entries) {
+    if (entry.ownerPayType === 'salary' || entry.ownerPayType === 'distribution') {
+      excluded.add(entry.id)
+    }
+  }
+
+  for (const pair of findOwnerPayCandidates(entries)) {
+    excluded.add(pair.outflow.id)
+    excluded.add(pair.inflow.id)
+  }
+
+  if (excluded.size === 0) return entries
+  return entries.filter(entry => !excluded.has(entry.id))
 }
 
 // =============================================
@@ -328,7 +391,9 @@ export async function getBudgetVsActual(
   // Transfers between the user's own accounts are movement, not earning or
   // spending. Counting them inflates both sides and makes surplus meaningless.
   const internalTransfers = findInternalTransfers(entries)
-  const realEntries = entries.filter(entry => !internalTransfers.has(entry.id))
+  const withoutInternal = entries.filter(entry => !internalTransfers.has(entry.id))
+  // At household scope, owner pay is movement between pockets, not income/spend
+  const realEntries = entity ? withoutInternal : excludeHouseholdMovement(withoutInternal)
 
   const actualIncome = realEntries
     .filter(entry => entry.type === 'income')

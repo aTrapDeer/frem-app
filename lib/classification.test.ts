@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { merchantKey, ruleMatches, type TransactionRule } from './classification'
+import {
+  AI_CLASSIFICATION_CATEGORIES,
+  merchantKey,
+  parseAiClassification,
+  ruleMatches,
+  type TransactionRule,
+} from './classification'
 
 function rule(overrides: Partial<TransactionRule> = {}): TransactionRule {
   return {
@@ -97,5 +103,58 @@ describe('cascade ordering', () => {
 
   it('puts the user’s own decisions first', () => {
     expect(ORDER[0]).toBe('rule')
+  })
+})
+
+describe('parseAiClassification', () => {
+  const validKeys = new Set(['Acme Market', 'Broken Merchant', 'Unknown'])
+
+  it('strips JSON code fences', () => {
+    const parsed = parseAiClassification(
+      '```json\n{"Acme Market":"GROCERIES"}\n```',
+      validKeys
+    )
+
+    expect(parsed.get('Acme Market')).toBe('GROCERIES')
+  })
+
+  it('rejects invalid categories and merchant names', () => {
+    const parsed = parseAiClassification(
+      '{"Acme Market":"SHOPPING","Not Requested":"GROCERIES","Unknown":"OTHER"}',
+      validKeys
+    )
+
+    expect(parsed).toEqual(new Map([['Unknown', 'OTHER']]))
+  })
+
+  it('recovers complete pairs from partial JSON', () => {
+    const parsed = parseAiClassification(
+      '{"Acme Market":"GROCERIES","Broken Merchant":',
+      validKeys
+    )
+
+    expect(parsed).toEqual(new Map([['Acme Market', 'GROCERIES']]))
+  })
+})
+
+describe('AI classification categories', () => {
+  it('contains exactly the closed category set', () => {
+    expect(new Set(AI_CLASSIFICATION_CATEGORIES)).toEqual(new Set([
+      'HOUSING',
+      'UTILITIES',
+      'GROCERIES',
+      'FOOD_AND_DRINK',
+      'TRANSPORTATION',
+      'ENTERTAINMENT',
+      'SUBSCRIPTIONS',
+      'HEALTH',
+      'INSURANCE',
+      'TRAVEL',
+      'PERSONAL_CARE',
+      'EDUCATION',
+      'BUSINESS_SERVICES',
+      'INCOME',
+      'OTHER',
+    ]))
   })
 })

@@ -1,5 +1,28 @@
 import { db, generateUUID, getCurrentTimestamp } from '@/lib/turso'
 import type { Entity } from '@/lib/bank-sync'
+import OpenAI from 'openai'
+
+const MODEL_NAME = 'gpt-5.2-2025-12-11'
+
+export const AI_CLASSIFICATION_CATEGORIES = [
+  'HOUSING',
+  'UTILITIES',
+  'GROCERIES',
+  'FOOD_AND_DRINK',
+  'TRANSPORTATION',
+  'ENTERTAINMENT',
+  'SUBSCRIPTIONS',
+  'HEALTH',
+  'INSURANCE',
+  'TRAVEL',
+  'PERSONAL_CARE',
+  'EDUCATION',
+  'BUSINESS_SERVICES',
+  'INCOME',
+  'OTHER',
+] as const
+
+const AI_CATEGORY_SET = new Set<string>(AI_CLASSIFICATION_CATEGORIES)
 
 /**
  * Transaction classification.
@@ -202,6 +225,118 @@ export async function recordMerchantCategory(
             updated_at = excluded.updated_at`,
     args: [generateUUID(), key, displayName ?? null, category, source, now, now],
   })
+}
+
+// =============================================
+// AI classification
+// =============================================
+
+function stripCodeFences(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim()
+}
+
+function addValidAiClassification(
+  result: Map<string, string>,
+  validKeys: Set<string>,
+  key: unknown,
+  category: unknown
+): void {
+  if (
+    typeof key === 'string' &&
+    validKeys.has(key) &&
+    typeof category === 'string' &&
+    AI_CATEGORY_SET.has(category)
+  ) {
+    result.set(key, category)
+  }
+}
+
+/**
+ * Parses both complete JSON and recoverable string pairs from truncated output.
+ * Invalid names and categories are ignored rather than poisoning the batch.
+ */
+export function parseAiClassification(
+  raw: string,
+  validKeys: Set<string>
+): Map<string, string> {
+  const result = new Map<string, string>()
+  const cleaned = stripCodeFences(raw)
+  const firstBrace = cleaned.indexOf('{')
+  const lastBrace = cleaned.lastIndexOf('}')
+  const candidate =
+    firstBrace >= 0 && lastBrace > firstBrace
+      ? cleaned.slice(firstBrace, lastBrace + 1)
+      : cleaned
+
+  try {
+    const parsed: unknown = JSON.parse(candidate)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const [key, category] of Object.entries(parsed)) {
+        addValidAiClassification(result, validKeys, key, category)
+      }
+      return result
+    }
+  } catch {
+    // A truncated object can still contain complete key/category pairs.
+  }
+
+  const pairPattern = /"((?:\\.|[^"\\])*)"\s*:\s*"((?:\\.|[^"\\])*)"/g
+  for (const match of cleaned.matchAll(pairPattern)) {
+    try {
+      const key: unknown = JSON.parse(`"${match[1]}"`)
+      const category: unknown = JSON.parse(`"${match[2]}"`)
+      addValidAiClassification(result, validKeys, key, category)
+    } catch {
+      // Ignore malformed escape sequences in an otherwise recoverable response.
+    }
+  }
+
+  return result
+}
+
+export async function aiClassifyMerchants(
+  merchants: Array<{ key: string; displayName: string }>
+): Promise<Map<string, string>> {
+  if (merchants.length === 0 || !process.env.OPENAI_API_KEY) return new Map()
+
+  const batch = merchants.slice(0, 60)
+  const validNames = new Set(batch.map(merchant => merchant.displayName))
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  const completion = await openai.chat.completions.create({
+    model: MODEL_NAME,
+    messages: [
+      {
+        role: 'system',
+        content: `Classify each merchant into exactly one category from this closed set: ${AI_CLASSIFICATION_CATEGORIES.join(', ')}. Return only a strict JSON object mapping each merchant name to its category.`,
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(batch.map(merchant => merchant.displayName)),
+      },
+    ],
+    response_format: { type: 'json_object' },
+    max_completion_tokens: 3000,
+  })
+
+  const byDisplayName = parseAiClassification(
+    completion.choices[0]?.message?.content ?? '',
+    validNames
+  )
+  const result = new Map<string, string>()
+
+  for (const merchant of batch) {
+    const category = byDisplayName.get(merchant.displayName)
+    if (!category) continue
+
+    result.set(merchant.key, category)
+    await recordMerchantCategory(merchant.key, category, 'ai', merchant.displayName)
+  }
+
+  return result
 }
 
 // =============================================

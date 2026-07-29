@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { findPossibleDuplicates, getBudgetVsActual, getEntitySurplus, getLedger } from '@/lib/ledger'
+import { findInternalTransfers, findPossibleDuplicates, getBudgetVsActual, getEntitySurplus, getLedger } from '@/lib/ledger'
 import type { Entity } from '@/lib/bank-sync'
 
 const VALID_ENTITIES: Entity[] = ['personal', 'business']
@@ -46,8 +46,14 @@ export async function GET(request: NextRequest) {
       limit: Math.min(Number(params.get('limit') ?? 250) || 250, 1000),
     })
 
+    // Matched pairs of money moving between the user's own linked accounts —
+    // shown labelled rather than hidden, so the list still reconciles against
+    // a bank statement
+    const internalTransferIds = [...findInternalTransfers(entries)]
+
     return NextResponse.json({
       entries,
+      internalTransferIds,
       duplicates: findPossibleDuplicates(entries),
       counts: {
         total: entries.length,

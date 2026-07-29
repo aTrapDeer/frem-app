@@ -48,6 +48,17 @@ interface ProjectionSummary {
   hasVariableIncome: boolean
 }
 
+interface EntityView {
+  income: { measured: number | null; plan: number }
+  expenses: { measured: number | null; plan: number }
+  surplus: { value: number; basis: 'measured' | 'plan'; monthsOfData: number }
+}
+
+interface FinancialOverview {
+  entities: { personal: EntityView; business: EntityView | null }
+  goals: Array<{ id: string }>
+}
+
 interface KPICardProps {
   title: string
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
@@ -63,11 +74,20 @@ interface QuickStatCardProps {
   index: number
 }
 
+function BasisChip({ basis, monthsOfData }: { basis: 'measured' | 'plan'; monthsOfData: number }) {
+  if (basis === 'measured') {
+    return <span className="text-[10px] font-semibold uppercase tracking-wide bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">measured · {monthsOfData} mo</span>
+  }
+
+  return <span className="text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">planned</span>
+}
+
 export default function DashboardPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [projections, setProjections] = useState<ProjectionSummary | null>(null)
+  const [overview, setOverview] = useState<FinancialOverview | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
 
   // Redirect unauthenticated users
@@ -84,9 +104,10 @@ export default function DashboardPage() {
       
       try {
         setDataLoading(true)
-        const [dashboardRes, projectionsRes] = await Promise.all([
+        const [dashboardRes, projectionsRes, overviewRes] = await Promise.all([
           fetch('/api/dashboard'),
-          fetch('/api/projections')
+          fetch('/api/projections'),
+          fetch('/api/overview').catch(() => null)
         ])
         
         if (dashboardRes.ok) {
@@ -97,6 +118,11 @@ export default function DashboardPage() {
         if (projectionsRes.ok) {
           const projectionsData = await projectionsRes.json()
           setProjections(projectionsData)
+        }
+
+        if (overviewRes?.ok) {
+          const overviewData = await overviewRes.json() as FinancialOverview
+          setOverview(overviewData)
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
@@ -118,6 +144,12 @@ export default function DashboardPage() {
       </div>
     )
   }
+
+  const displayedGoals = overview
+    ? projections?.goals.filter(goal => overview.goals.some(overviewGoal => overviewGoal.id === goal.goalId)) ?? []
+    : projections?.goals ?? []
+  const personalSurplus = overview?.entities.personal.surplus
+  const displayedSurplus = personalSurplus?.value ?? projections?.monthlySurplus ?? 0
 
   return (
     <div className="min-h-screen bg-white">
@@ -147,7 +179,7 @@ export default function DashboardPage() {
             /* KPI Cards */
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <GoalLikelihoodCard projections={projections} index={0} />
-              <FinancialRunwayCard projections={projections} index={1} />
+              <FinancialRunwayCard projections={projections} overview={overview} index={1} />
               <KPICard
                 title="Monthly Expenses"
                 icon={CreditCard}
@@ -158,7 +190,7 @@ export default function DashboardPage() {
           )}
 
           {/* Goal Projections Summary */}
-          {projections && projections.goals.length > 0 && (
+          {projections && displayedGoals.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -178,13 +210,16 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-right">
                       <div className="text-sm text-slate-500">Monthly Surplus</div>
-                      <div className="text-lg font-bold text-green-600">+{formatCurrency(projections.monthlySurplus)}</div>
+                      <div className={`flex items-center justify-end gap-1 text-lg font-bold ${displayedSurplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <span>{displayedSurplus >= 0 ? '+' : ''}{formatCurrency(displayedSurplus)}</span>
+                        {personalSurplus && <BasisChip basis={personalSurplus.basis} monthsOfData={personalSurplus.monthsOfData} />}
+                      </div>
                     </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {projections.goals.slice(0, 3).map((goal) => {
+                    {displayedGoals.slice(0, 3).map((goal) => {
                       const statusConfig = {
                         completed: { bg: 'bg-green-500', icon: CheckCircle2, color: 'text-green-600' },
                         ahead: { bg: 'bg-blue-500', icon: TrendingUp, color: 'text-blue-600' },
@@ -221,13 +256,13 @@ export default function DashboardPage() {
                       )
                     })}
                   </div>
-                  {projections.goals.length > 3 && (
+                  {displayedGoals.length > 3 && (
                     <Button
                       variant="ghost"
                       className="w-full mt-3 text-blue-600"
                       onClick={() => router.push('/goals')}
                     >
-                      View all {projections.goals.length} goals →
+                      View all {displayedGoals.length} goals →
                     </Button>
                   )}
                 </CardContent>
@@ -548,9 +583,22 @@ function GoalLikelihoodCard({ projections, index }: { projections: ProjectionSum
 }
 
 // Financial Runway Card
-function FinancialRunwayCard({ projections, index }: { projections: ProjectionSummary | null, index: number }) {
-  const surplus = projections?.monthlySurplus || 0
-  const monthlyExpenses = projections?.totalMonthlyExpenses || 0
+function FinancialRunwayCard({
+  projections,
+  overview,
+  index,
+}: {
+  projections: ProjectionSummary | null
+  overview: FinancialOverview | null
+  index: number
+}) {
+  const personalOverview = overview?.entities.personal
+  const measuredSurplus = personalOverview?.surplus.basis === 'measured'
+  const surplus = personalOverview?.surplus.value ?? projections?.monthlySurplus ?? 0
+  const plannedSurplus = personalOverview
+    ? personalOverview.income.plan - personalOverview.expenses.plan
+    : projections?.monthlySurplus ?? 0
+  const monthlyExpenses = personalOverview?.expenses.measured ?? personalOverview?.expenses.plan ?? projections?.totalMonthlyExpenses ?? 0
   
   // Calculate how many months of expenses the surplus covers
   const surplusRatio = monthlyExpenses > 0 ? (surplus / monthlyExpenses) * 100 : 0
@@ -599,13 +647,27 @@ function FinancialRunwayCard({ projections, index }: { projections: ProjectionSu
           <div className="space-y-3">
             <div>
               <div className={`text-2xl font-bold ${isPositive ? colors.text : 'text-red-600'}`}>
-                {isPositive ? '+' : ''}{formatCurrency(surplus)}
+                <span>{isPositive ? '+' : ''}{formatCurrency(surplus)}</span>
+                {personalOverview && (
+                  <span className="ml-2 align-middle">
+                    <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} />
+                  </span>
+                )}
               </div>
+              {measuredSurplus && (
+                <p className="text-xs text-slate-500 mt-1">
+                  planned {plannedSurplus >= 0 ? '+' : ''}{formatCurrency(plannedSurplus)}
+                </p>
+              )}
               <div className="flex items-center gap-2 mt-1">
-                <span className={`text-xs px-2 py-0.5 rounded-full ${colors.light} ${colors.text} font-medium`}>
-                  {status.label}
-                </span>
-                {monthlyExpenses > 0 && (
+                {measuredSurplus && !isPositive ? (
+                  <span className="text-xs text-red-600 font-medium">Spending more than you earn</span>
+                ) : (
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${colors.light} ${colors.text} font-medium`}>
+                    {status.label}
+                  </span>
+                )}
+                {monthlyExpenses > 0 && !(measuredSurplus && !isPositive) && (
                   <span className="text-xs text-slate-500">
                     {Math.abs(surplusRatio).toFixed(0)}% of expenses
                   </span>

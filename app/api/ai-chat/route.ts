@@ -1,8 +1,10 @@
 import { auth } from '@/auth'
+import { getBusinessProfile } from '@/lib/business-profile'
 import { 
   buildAIContext,
   getAIFinancialReport
 } from '@/lib/database'
+import { getFinancialOverview, type EntityView } from '@/lib/overview'
 import OpenAI from 'openai'
 import { chatRequestSchema, parseBody } from '@/lib/validation'
 import { AI_CHAT_LIMIT, checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
@@ -16,6 +18,9 @@ Guidelines:
 - Be conversational, friendly, and encouraging
 - Give specific, actionable advice based on their actual financial data
 - Reference their specific goals, income, and expenses when relevant
+- Measured figures outrank planned figures when they disagree; explicitly tell the user about the discrepancy
+- When a business exists and personal surplus is negative while business surplus is positive, address owner pay levels with concrete dollar amounts
+- Never present planned income as fact when measured income differs
 - Use simple language, avoid jargon
 - If they ask about something you don't have data for, acknowledge that and give general advice
 - Keep responses concise but helpful (2-4 paragraphs max unless they ask for detailed analysis)
@@ -30,6 +35,64 @@ You have access to their complete financial profile including:
 - Any one-time income they've received
 
 Help them understand their finances and make progress toward their goals!`
+
+function formatEntityReality(label: string, entity: EntityView): string[] {
+  const measuredIncome =
+    entity.income.measured === null
+      ? 'unavailable'
+      : `$${entity.income.measured.toLocaleString()}`
+  const measuredExpenses =
+    entity.expenses.measured === null
+      ? 'unavailable'
+      : `$${entity.expenses.measured.toLocaleString()}`
+
+  return [
+    `${label}:`,
+    `- Income: measured ${measuredIncome}; planned $${entity.income.plan.toLocaleString()}`,
+    `- Expenses: measured ${measuredExpenses}; planned $${entity.expenses.plan.toLocaleString()}`,
+    `- Surplus: $${entity.surplus.value.toLocaleString()} (${entity.surplus.basis} basis, ${entity.surplus.monthsOfData} months of data)`,
+  ]
+}
+
+async function buildMeasuredReality(userId: string): Promise<string> {
+  let overview: Awaited<ReturnType<typeof getFinancialOverview>> | null = null
+  let profile: Awaited<ReturnType<typeof getBusinessProfile>> = null
+
+  try {
+    overview = await getFinancialOverview(userId)
+  } catch (error) {
+    console.error('Unable to add measured overview to AI chat:', error)
+  }
+
+  try {
+    profile = await getBusinessProfile(userId)
+  } catch (error) {
+    console.error('Unable to add business profile to AI chat:', error)
+  }
+
+  if (!overview) return ''
+
+  const lines = [
+    '',
+    '',
+    'MEASURED REALITY:',
+    ...formatEntityReality('Personal', overview.entities.personal),
+  ]
+
+  if (overview.entities.business) {
+    lines.push(...formatEntityReality('Business', overview.entities.business))
+  }
+
+  lines.push(`Owner-pay transactions pending review: ${overview.ownerPay.pendingCount}`)
+
+  if (profile) {
+    lines.push(
+      `Business profile: type ${profile.business_type}; payment forms ${profile.payment_forms.join(', ') || 'none'}; ownership ${profile.ownership_percentage}%`
+    )
+  }
+
+  return lines.join('\n')
+}
 
 function buildContextSummary(context: Awaited<ReturnType<typeof buildAIContext>>): string {
   const { incomeSources, goals, expenses, sideProjects, accounts, oneTimeIncome, oneTimeTransactions, metrics } = context
@@ -146,7 +209,9 @@ export async function POST(request: Request) {
 
     // Build financial context
     const context = await buildAIContext(session.user.id)
-    const contextSummary = buildContextSummary(context)
+    const contextSummary =
+      buildContextSummary(context) +
+      await buildMeasuredReality(session.user.id)
     
     // Get existing report for additional context if available
     const existingReport = await getAIFinancialReport(session.user.id)

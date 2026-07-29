@@ -373,7 +373,7 @@ export default function GoalsPage() {
                         )}
                       </div>
                       <p className="text-sm text-slate-600">
-                        Your <span className="font-medium text-green-600">${projections.monthlySurplus.toLocaleString()}/mo</span> surplus is automatically allocated to your goals
+                        Up to <span className="font-medium text-green-600">${projections.monthlySurplus.toLocaleString()}/mo</span> of planned surplus is allocated to your goals — measured bank data takes over as it arrives
                       </p>
                     </div>
                     <div className="text-right">

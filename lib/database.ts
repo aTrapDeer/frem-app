@@ -14,6 +14,7 @@ import {
   totalMonthlyGoalObligation,
 } from './projections'
 import { isIncomeSourceActive } from './freshness'
+import { RISK_PROFILE_RATES } from './setup'
 
 // Type definitions
 export type Transaction = {
@@ -40,8 +41,11 @@ export type Goal = {
   start_date: string | null
   deadline: string
   interest_rate: number | null
+  linked_account_id: string | null
+  linked_account_kind: 'bank' | 'investment' | null
+  allocation_percent: number | null
   priority: 'low' | 'medium' | 'high'
-  urgency_score: number // 1-5, higher = more urgent, affects surplus allocation
+  urgency_score: number // 1-5 UI urgency signal; only used as a projection sort tie-breaker
   status: 'active' | 'completed' | 'paused' | 'cancelled'
   // Business surplus cannot fund a personal goal directly, so goals are scoped
   entity: 'personal' | 'business'
@@ -156,6 +160,9 @@ function rowToGoal(row: Record<string, unknown>): Goal {
     start_date: row.start_date as string | null,
     deadline: row.deadline as string,
     interest_rate: row.interest_rate as number | null,
+    linked_account_id: (row.linked_account_id as string | null) ?? null,
+    linked_account_kind: (row.linked_account_kind as Goal['linked_account_kind']) ?? null,
+    allocation_percent: (row.allocation_percent as number | null) ?? null,
     priority: row.priority as Goal['priority'],
     urgency_score: (row.urgency_score as number) || 3, // Default to 3 (medium) if not set
     status: row.status as Goal['status'],
@@ -434,8 +441,8 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
   const now = getCurrentTimestamp()
   
   await db.execute({
-    sql: `INSERT INTO financial_goals (id, user_id, title, description, target_amount, current_amount, category, start_date, deadline, interest_rate, priority, urgency_score, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO financial_goals (id, user_id, title, description, target_amount, current_amount, category, start_date, deadline, interest_rate, linked_account_id, linked_account_kind, allocation_percent, priority, urgency_score, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       goal.user_id,
@@ -447,6 +454,9 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
       goal.start_date ?? null,
       goal.deadline,
       goal.interest_rate ?? null,
+      goal.linked_account_id ?? null,
+      goal.linked_account_kind ?? null,
+      goal.allocation_percent ?? null,
       goal.priority ?? 'medium',
       goal.urgency_score ?? 3, // Default to 3 (medium urgency)
       goal.status ?? 'active',
@@ -519,6 +529,18 @@ export const updateGoal = async (userId: string, id: string, updates: Partial<Go
   if (updates.interest_rate !== undefined) {
     fields.push('interest_rate = ?')
     args.push(updates.interest_rate)
+  }
+  if (updates.linked_account_id !== undefined) {
+    fields.push('linked_account_id = ?')
+    args.push(updates.linked_account_id)
+  }
+  if (updates.linked_account_kind !== undefined) {
+    fields.push('linked_account_kind = ?')
+    args.push(updates.linked_account_kind)
+  }
+  if (updates.allocation_percent !== undefined) {
+    fields.push('allocation_percent = ?')
+    args.push(updates.allocation_percent)
   }
   if (updates.priority !== undefined) {
     fields.push('priority = ?')
@@ -1266,6 +1288,49 @@ export interface ProjectionSummary {
   }
 }
 
+export function goalImportance(priority: Goal['priority']): number {
+  if (priority === 'high') return 1.5
+  if (priority === 'low') return 0.6
+  return 1
+}
+
+export function goalAllocationWeight(
+  monthlyRequirement: number,
+  priority: Goal['priority'],
+  monthsUntilDeadline: number
+): number {
+  const timePressure = Math.max(0.1, 12 / monthsUntilDeadline)
+  return monthlyRequirement * goalImportance(priority) * timePressure
+}
+
+export function effectiveCurrentAmount(
+  balance: number,
+  allocationPercent: number | null
+): number {
+  return balance * ((allocationPercent ?? 100) / 100)
+}
+
+export function statusForGoal({
+  progressPercentage,
+  completed,
+  projectedAfterDeadline,
+  unreachable,
+  daysAheadOrBehind,
+}: {
+  progressPercentage: number
+  completed: boolean
+  projectedAfterDeadline: boolean
+  unreachable: boolean
+  daysAheadOrBehind: number
+}): GoalProjection['status'] {
+  if (progressPercentage >= 100) return 'completed'
+  if (!completed && (unreachable || projectedAfterDeadline)) return 'at_risk'
+  if (daysAheadOrBehind > 30) return 'ahead'
+  if (daysAheadOrBehind >= 0) return 'on_track'
+  if (daysAheadOrBehind >= -30) return 'behind'
+  return 'at_risk'
+}
+
 export const calculateGoalProjections = async (userId: string): Promise<ProjectionSummary> => {
   try {
     // Get all required data
@@ -1279,6 +1344,86 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
     ])
     
     const allActiveGoals = goals.filter(g => g.status === 'active')
+    const linkedBankIds = [...new Set(
+      allActiveGoals
+        .filter(goal => goal.linked_account_kind === 'bank' && goal.linked_account_id)
+        .map(goal => goal.linked_account_id as string)
+    )]
+    const linkedInvestmentIds = [...new Set(
+      allActiveGoals
+        .filter(goal => goal.linked_account_kind === 'investment' && goal.linked_account_id)
+        .map(goal => goal.linked_account_id as string)
+    )]
+
+    const [bankAccountsResult, investmentAccountsResult] = await Promise.all([
+      linkedBankIds.length > 0
+        ? db.execute({
+            sql: `SELECT id, current_balance
+                  FROM bank_accounts
+                  WHERE id IN (${linkedBankIds.map(() => '?').join(', ')})
+                    AND user_id = ?
+                    AND is_excluded = 0`,
+            args: [...linkedBankIds, userId],
+          }).catch(() => null)
+        : Promise.resolve(null),
+      linkedInvestmentIds.length > 0
+        ? db.execute({
+            sql: `SELECT id, balance, risk_profile
+                  FROM investment_accounts
+                  WHERE id IN (${linkedInvestmentIds.map(() => '?').join(', ')})
+                    AND user_id = ?`,
+            args: [...linkedInvestmentIds, userId],
+          }).catch(() => null)
+        : Promise.resolve(null),
+    ])
+
+    const linkedBankBalances = new Map<string, number>()
+    bankAccountsResult?.rows.forEach(row => {
+      linkedBankBalances.set(String(row.id), Number(row.current_balance ?? 0))
+    })
+
+    const linkedInvestmentAccounts = new Map<
+      string,
+      { balance: number; riskProfile: keyof typeof RISK_PROFILE_RATES }
+    >()
+    investmentAccountsResult?.rows.forEach(row => {
+      linkedInvestmentAccounts.set(String(row.id), {
+        balance: Number(row.balance ?? 0),
+        riskProfile: row.risk_profile as keyof typeof RISK_PROFILE_RATES,
+      })
+    })
+
+    const currentAmountForGoal = (goal: Goal): number => {
+      if (!goal.linked_account_id) return goal.current_amount
+
+      if (goal.linked_account_kind === 'bank') {
+        const balance = linkedBankBalances.get(goal.linked_account_id)
+        return balance === undefined
+          ? goal.current_amount
+          : effectiveCurrentAmount(balance, goal.allocation_percent)
+      }
+
+      if (goal.linked_account_kind === 'investment') {
+        const account = linkedInvestmentAccounts.get(goal.linked_account_id)
+        return account
+          ? effectiveCurrentAmount(account.balance, goal.allocation_percent)
+          : goal.current_amount
+      }
+
+      return goal.current_amount
+    }
+
+    const growthRateForGoal = (goal: Goal): number | null => {
+      if (goal.linked_account_kind === 'investment' && goal.linked_account_id) {
+        const account = linkedInvestmentAccounts.get(goal.linked_account_id)
+        if (account) {
+          return goal.interest_rate ?? RISK_PROFILE_RATES[account.riskProfile]
+        }
+      }
+
+      return effectiveRate(goal)
+    }
+
     const activeSources = incomeSources.filter(s => isIncomeSourceActive(s))
     const activeSideProjects = sideProjects.filter(p => p.status === 'active')
 
@@ -1383,16 +1528,22 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
       const monthsToMaxDeadline = Math.max(1, diffMonths(startOfMonth, maxDeadline) + 1)
       const simulationMonths = Math.min(monthsToMaxDeadline + 120, 240)
 
-      const goalStates = activeGoals.map(goal => ({
-        goal,
-        balance: goal.current_amount,
-        startDate: goal.start_date ? getMonthStart(parseLocalDate(goal.start_date)) : startOfMonth,
-        deadline: getMonthStart(parseLocalDate(goal.deadline)),
-        totalAllocated: 0,
-        allocationMonths: 0,
-        completionDate: null as Date | null,
-        balanceAtDeadline: null as number | null
-      }))
+      const goalStates = activeGoals.map(goal => {
+        const currentAmount = currentAmountForGoal(goal)
+
+        return {
+          goal,
+          currentAmount,
+          annualGrowthRate: growthRateForGoal(goal),
+          balance: currentAmount,
+          startDate: goal.start_date ? getMonthStart(parseLocalDate(goal.start_date)) : startOfMonth,
+          deadline: getMonthStart(parseLocalDate(goal.deadline)),
+          totalAllocated: 0,
+          allocationMonths: 0,
+          completionDate: null as Date | null,
+          balanceAtDeadline: null as number | null
+        }
+      })
 
       for (let monthIndex = 0; monthIndex < simulationMonths; monthIndex += 1) {
         const monthDate = addMonths(startOfMonth, monthIndex)
@@ -1401,24 +1552,22 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
         })
 
         // Calculate weighted monthly requirements for allocation
-        // Goals due sooner with higher urgency get proportionally more
+        // Goals due sooner and with higher importance get proportionally more
         const goalsWithWeights = activeThisMonth.map(state => {
           const remaining = Math.max(0, state.goal.target_amount - state.balance)
           const monthsUntilDeadline = Math.max(1, diffMonths(monthDate, state.deadline))
-          const urgencyWeight = state.goal.urgency_score || 3
           
           // Calculate monthly requirement to meet deadline
           const monthlyRequirement = remaining / monthsUntilDeadline
           
-          // Time pressure factor: goals due sooner get exponentially more weight
-          // 1 month = 12x multiplier, 12 months = 1x, 24 months = 0.5x, etc.
-          const timePressure = Math.max(0.1, 12 / monthsUntilDeadline)
+          // Priority captures importance; the deadline independently supplies urgency.
+          const weight = goalAllocationWeight(
+            monthlyRequirement,
+            state.goal.priority,
+            monthsUntilDeadline
+          )
           
-          // Combined weight: monthly requirement * urgency * time pressure
-          // This ensures urgent near-term goals get priority over large long-term ones
-          const weight = monthlyRequirement * urgencyWeight * timePressure
-          
-          return { state, remaining, monthlyRequirement, urgencyWeight, timePressure, weight }
+          return { state, weight }
         })
 
         const totalWeight = goalsWithWeights.reduce((sum, g) => sum + g.weight, 0)
@@ -1432,7 +1581,7 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
             state.allocationMonths += 1
           }
 
-          const monthlyRate = getMonthlyGrowthRate(effectiveRate(state.goal))
+          const monthlyRate = getMonthlyGrowthRate(state.annualGrowthRate)
 
           state.balance = state.balance * (1 + monthlyRate) + allocation
 
@@ -1455,10 +1604,10 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
 
         const effectiveStart = state.startDate > startOfMonth ? state.startDate : startOfMonth
         const completionMonths = estimateMonthsToComplete(
-          state.goal.current_amount,
+          state.currentAmount,
           state.goal.target_amount,
           monthlyAllocation,
-          effectiveRate(state.goal)
+          state.annualGrowthRate
         )
 
         const projectedCompletionDate = state.completionDate
@@ -1477,30 +1626,22 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
 
         const isOnTrack = Boolean(state.completionDate && state.completionDate <= state.deadline)
         const daysAheadOrBehind = Math.round((state.deadline.getTime() - projectedCompletionDate.getTime()) / (1000 * 60 * 60 * 24))
-
-        let status: GoalProjection['status']
-        if (progressPercentage >= 100) {
-          status = 'completed'
-        } else if (!state.completionDate && projectedCompletionDate > state.deadline) {
-          status = 'at_risk'
-        } else if (daysAheadOrBehind > 30) {
-          status = 'ahead'
-        } else if (daysAheadOrBehind >= 0) {
-          status = 'on_track'
-        } else if (daysAheadOrBehind >= -30) {
-          status = 'behind'
-        } else {
-          status = 'at_risk'
-        }
+        const status = statusForGoal({
+          progressPercentage,
+          completed: Boolean(state.completionDate),
+          projectedAfterDeadline: projectedCompletionDate > state.deadline,
+          unreachable: completionMonths === Infinity,
+          daysAheadOrBehind,
+        })
 
         // Suggest a realistic deadline for behind/at_risk goals
         let suggestedDeadline: string | undefined
         if ((status === 'behind' || status === 'at_risk') && monthlyAllocation > 0) {
           const monthsNeeded = estimateMonthsToComplete(
-            state.goal.current_amount,
+            state.currentAmount,
             state.goal.target_amount,
             monthlyAllocation,
-            effectiveRate(state.goal)
+            state.annualGrowthRate
           )
           if (monthsNeeded !== Infinity && monthsNeeded > 0) {
             const suggested = addMonths(startOfMonth, Math.ceil(monthsNeeded) + 1)
@@ -1512,7 +1653,7 @@ export const calculateGoalProjections = async (userId: string): Promise<Projecti
           goalId: state.goal.id,
           title: state.goal.title,
           targetAmount: state.goal.target_amount,
-          currentAmount: state.goal.current_amount,
+          currentAmount: state.currentAmount,
           projectedAmount: toCents(projectedAmount),
           totalProjectedProgress: toCents(projectedAmount),
           progressPercentage: toCents(progressPercentage),
@@ -1917,7 +2058,7 @@ export const updateIncomeSource = async (userId: string, id: string, updates: Pa
 export const deleteIncomeSource = async (userId: string, id: string): Promise<void> => {
   await db.execute({
     sql: 'UPDATE income_sources SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?',
-    args: ['ended', getCurrentTimestamp(), id]
+    args: ['ended', getCurrentTimestamp(), id, userId]
   })
 }
 

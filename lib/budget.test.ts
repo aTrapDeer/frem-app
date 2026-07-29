@@ -27,6 +27,15 @@ describe('toAppCategory', () => {
     expect(toAppCategory('MEDICAL')).toBe('health')
   })
 
+  it('splits groceries out of food using the detailed category', () => {
+    // 83 grocery transactions were indistinguishable from coffee runs under
+    // the primary category alone
+    expect(toAppCategory('FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES')).toBe('groceries')
+    expect(toAppCategory('FOOD_AND_DRINK', 'FOOD_AND_DRINK_RESTAURANT')).toBe('food')
+    expect(toAppCategory('FOOD_AND_DRINK', 'FOOD_AND_DRINK_COFFEE')).toBe('food')
+    expect(toAppCategory('FOOD_AND_DRINK', null)).toBe('food')
+  })
+
   it('folds travel into transportation so they share a budget line', () => {
     expect(toAppCategory('TRAVEL')).toBe(toAppCategory('TRANSPORTATION'))
   })

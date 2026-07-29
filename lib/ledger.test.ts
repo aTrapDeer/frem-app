@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findInternalTransfers, findPossibleDuplicates, type LedgerEntry } from './ledger'
+import { excludeHouseholdMovement, findInternalTransfers, findOwnerPayCandidates, findPossibleDuplicates, type LedgerEntry } from './ledger'
 
 function entry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
   return {
@@ -18,6 +18,7 @@ function entry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
     accountId: 'a1',
     pending: false,
     classificationSource: 'default',
+    ownerPayType: null,
     ...overrides,
   }
 }
@@ -126,7 +127,7 @@ describe('findInternalTransfers', () => {
   const transfer = (over: Partial<LedgerEntry>) =>
     entry({ category: 'TRANSFER_OUT', ...over })
 
-  it('matches a transfer leaving one account and arriving in another', () => {
+  it('matches a same-entity transfer leaving one account and arriving in another', () => {
     // Both sides linked means the same movement appears twice
     const entries = [
       transfer({ id: 'out', accountId: 'a', type: 'expense', amount: 500, date: '2026-06-10' }),
@@ -194,5 +195,110 @@ describe('findInternalTransfers', () => {
     expect(income).toBe(3000)
     expect(expenses).toBe(750)
     expect(income - expenses).toBe(2250)
+  })
+})
+
+describe('findOwnerPayCandidates', () => {
+  const transfer = (overrides: Partial<LedgerEntry>) =>
+    entry({ category: 'TRANSFER_OUT', ...overrides })
+
+  it('keeps business-to-personal owner pay in each entity surplus', () => {
+    const entries = [
+      transfer({
+        id: 'business-out',
+        accountId: 'business-checking',
+        type: 'expense',
+        amount: 2000,
+        signedAmount: -2000,
+        date: '2026-06-10',
+        entity: 'business',
+      }),
+      transfer({
+        id: 'personal-in',
+        accountId: 'personal-checking',
+        type: 'income',
+        amount: 2000,
+        signedAmount: 2000,
+        date: '2026-06-11',
+        category: 'TRANSFER_IN',
+        entity: 'personal',
+      }),
+    ]
+
+    const internal = findInternalTransfers(entries)
+    const candidates = findOwnerPayCandidates(entries)
+    const kept = entries.filter(item => !internal.has(item.id))
+
+    expect(internal.size).toBe(0)
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0].outflow.id).toBe('business-out')
+    expect(candidates[0].inflow.id).toBe('personal-in')
+    expect(
+      kept
+        .filter(item => item.entity === 'business')
+        .reduce((sum, item) => sum + item.signedAmount, 0)
+    ).toBe(-2000)
+    expect(
+      kept
+        .filter(item => item.entity === 'personal')
+        .reduce((sum, item) => sum + item.signedAmount, 0)
+    ).toBe(2000)
+  })
+
+  it('continues excluding a personal-to-personal transfer', () => {
+    const entries = [
+      transfer({
+        id: 'personal-out',
+        accountId: 'checking',
+        type: 'expense',
+        amount: 500,
+        entity: 'personal',
+      }),
+      transfer({
+        id: 'personal-in',
+        accountId: 'savings',
+        type: 'income',
+        amount: 500,
+        category: 'TRANSFER_IN',
+        entity: 'personal',
+      }),
+    ]
+
+    expect(findInternalTransfers(entries)).toEqual(new Set(['personal-out', 'personal-in']))
+    expect(findOwnerPayCandidates(entries)).toHaveLength(0)
+  })
+})
+
+describe('excludeHouseholdMovement', () => {
+  it('drops confirmed owner-pay rows from a combined view', () => {
+    // Same dollars changing pockets: counting both sides inflated household
+    // income and spending by the full amount each way
+    const entries = [
+      entry({ id: 'biz-out', entity: 'business', type: 'expense', amount: 300, ownerPayType: 'salary' }),
+      entry({ id: 'me-in', entity: 'personal', type: 'income', amount: 300, ownerPayType: 'salary' }),
+      entry({ id: 'rent', entity: 'personal', type: 'expense', amount: 750 }),
+    ]
+
+    const kept = excludeHouseholdMovement(entries)
+    expect(kept.map(item => item.id)).toEqual(['rent'])
+  })
+
+  it('drops unconfirmed cross-entity transfer pairs too', () => {
+    const entries = [
+      entry({ id: 'out', entity: 'business', accountId: 'a', type: 'expense', amount: 780, category: 'TRANSFER_OUT', date: '2026-07-28' }),
+      entry({ id: 'in', entity: 'personal', accountId: 'b', type: 'income', amount: 780, category: 'TRANSFER_IN', date: '2026-07-28' }),
+      entry({ id: 'pay', entity: 'personal', type: 'income', amount: 2000, category: 'INCOME' }),
+    ]
+
+    const kept = excludeHouseholdMovement(entries)
+    expect(kept.map(item => item.id)).toEqual(['pay'])
+  })
+
+  it('leaves everything alone when there is no owner pay', () => {
+    const entries = [
+      entry({ id: 'a', amount: 10 }),
+      entry({ id: 'b', amount: 20, type: 'income' }),
+    ]
+    expect(excludeHouseholdMovement(entries)).toHaveLength(2)
   })
 })
