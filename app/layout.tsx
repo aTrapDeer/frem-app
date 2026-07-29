@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter, DM_Sans } from "next/font/google"
+import { Inter, DM_Sans, Bricolage_Grotesque } from "next/font/google"
 import "./globals.css"
 import { SessionProvider } from '@/components/session-provider'
 import { AuthProvider } from '@/contexts/auth-context'
@@ -14,6 +14,14 @@ const inter = Inter({
 const dmSans = DM_Sans({
   subsets: ["latin"],
   variable: "--font-dm-sans",
+  display: "swap",
+})
+
+// Display face for the landing page — deliberately not Inter/Geist/Space
+// Grotesk, which read as default-AI-output in 2026
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
   display: "swap",
 })
 
@@ -52,7 +60,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${dmSans.variable}`}>
+    <html lang="en" className={`${inter.variable} ${dmSans.variable} ${bricolage.variable}`}>
       <body className={`${inter.className} antialiased`}>
         <SessionProvider>
           <AuthProvider>
