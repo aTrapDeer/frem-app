@@ -100,7 +100,7 @@ The chat (already business-aware) then discusses *in the user's numbers*:
 - **Timeline honesty**: "at measured surplus this deadline is not reachable;
   reachable options: +$X/mo, +N months, or reduce target to $Y."
 
-**The advice boundary (non-negotiable):** the AI explains vehicles and modelsx
+**The advice boundary (non-negotiable):** the AI explains vehicles and models
 scenarios; it never says "buy this fund/policy." System prompt gains an
 explicit instruction; every insight ends with the licensed-professional line.
 This keeps the feature clearly on the education side of RIA territory when
