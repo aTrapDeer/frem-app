@@ -324,6 +324,7 @@ function ActivityTab({ entity, onRefine }: { entity: Entity | 'all'; onRefine: (
   const [showCashForm, setShowCashForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftCategory, setDraftCategory] = useState('')
+  const [draftEntity, setDraftEntity] = useState<Entity>('personal')
   const [savingCategory, setSavingCategory] = useState(false)
 
   const load = useCallback(async () => {
@@ -363,6 +364,7 @@ function ActivityTab({ entity, onRefine }: { entity: Entity | 'all'; onRefine: (
           action: 'set',
           merchantName: entry.merchantName ?? entry.description,
           category: draftCategory,
+          entity: draftEntity,
         }),
       })
       if (response.ok) {
@@ -500,6 +502,24 @@ function ActivityTab({ entity, onRefine }: { entity: Entity | 'all'; onRefine: (
                                 <option key={option} value={option}>{formatCategory(option)}</option>
                               ))}
                             </select>
+                            <span className="inline-flex p-0.5 bg-slate-100 rounded">
+                              {(['personal', 'business'] as const).map(option => (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onClick={() => setDraftEntity(option)}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide transition-all ${
+                                    draftEntity === option
+                                      ? option === 'business'
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-white text-slate-900 shadow-sm'
+                                      : 'text-slate-400'
+                                  }`}
+                                >
+                                  {option === 'personal' ? 'Pers' : 'Biz'}
+                                </button>
+                              ))}
+                            </span>
                             <button
                               type="button"
                               disabled={savingCategory || !draftCategory}
@@ -523,6 +543,7 @@ function ActivityTab({ entity, onRefine }: { entity: Entity | 'all'; onRefine: (
                               if (entry.source !== 'synced') return
                               setEditingId(entry.id)
                               setDraftCategory(entry.category?.toUpperCase().split(' ').join('_') ?? '')
+                              setDraftEntity(entry.entity)
                             }}
                             className={`${entry.category ? '' : 'text-amber-600'} ${
                               entry.source === 'synced'

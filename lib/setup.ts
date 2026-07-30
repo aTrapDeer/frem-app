@@ -54,6 +54,7 @@ export type SetupStatus = {
     } | null
     incomeSourceCount: number
     estimateCount: number
+    recurringExpenseCount: number
     activeGoalCount: number
     hasBankData: boolean
     accountCount: number
@@ -256,6 +257,7 @@ export async function getSetupStatus(userId: string): Promise<SetupStatus> {
     businessProfileRow,
     incomeSourceCount,
     estimateCount,
+    recurringExpenseCount,
     activeGoalCount,
     bankTransactionCount,
     accountCount,
@@ -290,6 +292,12 @@ export async function getSetupStatus(userId: string): Promise<SetupStatus> {
       userId
     ),
     countRows('SELECT COUNT(*) AS count FROM spending_estimates WHERE user_id = ?', userId),
+    countRows(
+      `SELECT COUNT(*) AS count
+       FROM recurring_expenses
+       WHERE user_id = ? AND status = 'active'`,
+      userId
+    ),
     countRows(
       `SELECT COUNT(*) AS count
        FROM financial_goals
@@ -344,6 +352,7 @@ export async function getSetupStatus(userId: string): Promise<SetupStatus> {
       businessProfile,
       incomeSourceCount,
       estimateCount,
+      recurringExpenseCount,
       activeGoalCount,
       hasBankData: bankTransactionCount > 0,
       accountCount,

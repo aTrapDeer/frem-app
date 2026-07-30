@@ -11,8 +11,7 @@ import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
 import { AIFinancialReport } from "@/components/ai-financial-report"
-import { FinancialAccounts } from "@/components/financial-accounts"
-import { OneTimeIncomeManager } from "@/components/one-time-income"
+import { LinkedAccountsCard } from "@/components/linked-accounts-card"
 
 const BubbleMap = React.lazy(() => import("@/components/bubble-map"))
 
@@ -521,7 +520,7 @@ export default function SummaryPage() {
                   <TrendingUp className="h-4 w-4 text-slate-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className={`flex items-center gap-2 text-2xl font-bold font-numbers ${kpis.savingsRate >= 20 ? 'text-green-600' : kpis.savingsRate >= 10 ? 'text-amber-600' : kpis.savingsRate >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                  <div className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold font-numbers ${kpis.savingsRate >= 20 ? 'text-green-600' : kpis.savingsRate >= 10 ? 'text-amber-600' : kpis.savingsRate >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
                     <span>{kpis.savingsRate}%</span>
                     {personalOverview && (
                       <BasisChip
@@ -576,7 +575,7 @@ export default function SummaryPage() {
                   <DollarSign className={`h-4 w-4 ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`} />
                 </CardHeader>
                 <CardContent>
-                  <div className={`flex items-center gap-2 text-2xl font-bold font-numbers ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <div className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold font-numbers ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     <span>{kpis.monthlySurplus >= 0 ? '+' : ''}${Math.abs(Math.round(kpis.monthlySurplus)).toLocaleString()}</span>
                     {personalOverview && (
                       <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} />
@@ -613,7 +612,7 @@ export default function SummaryPage() {
                     <DollarSign className="h-4 w-4 text-green-600" />
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center gap-2 text-2xl font-bold font-numbers text-slate-900">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold font-numbers text-slate-900">
                       <span>${kpis.monthlyIncome.toLocaleString()}</span>
                       {personalOverview && (
                         <BasisChip
@@ -662,7 +661,7 @@ export default function SummaryPage() {
                     {kpis.surplus >= 0 ? <TrendingUp className="h-4 w-4 text-green-600" /> : <TrendingDown className="h-4 w-4 text-red-600" />}
                   </CardHeader>
                   <CardContent>
-                    <div className={`flex items-center gap-2 text-2xl font-bold font-numbers ${kpis.surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold font-numbers ${kpis.surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       <span>{kpis.surplus >= 0 ? '+' : ''}${Math.abs(Math.round(kpis.surplus)).toLocaleString()}</span>
                       {personalOverview && (
                         <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} />
@@ -827,14 +826,13 @@ export default function SummaryPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.82 }}
             >
-              <FinancialAccounts />
+              <LinkedAccountsCard />
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.84 }}
             >
-              <OneTimeIncomeManager />
             </motion.div>
           </div>
 

@@ -111,20 +111,24 @@ interface Prefill {
   incomeSourceCount: number
   estimateCount: number
   activeGoalCount: number
+  recurringExpenseCount?: number
   hasBankData: boolean
   accountCount: number
   investments: Array<{ id: string; accountType: string; balance: number; riskProfile: string }>
   liabilities: Array<{ id: string; name: string; kind: string; balance: number; interestRate: number | null }>
 }
 
+/**
+ * Variable, swipe-the-card spending only. Fixed bills (rent, utilities,
+ * subscriptions) live in the bills step — the two used to overlap, which made
+ * both steps confusing and risked double-counted plans.
+ */
 const SPENDING_CATEGORIES = [
   { key: 'groceries', label: 'Groceries' },
   { key: 'food', label: 'Eating out & coffee' },
-  { key: 'housing', label: 'Rent / mortgage payment' },
-  { key: 'utilities', label: 'Utilities & phone' },
-  { key: 'transportation', label: 'Transportation' },
-  { key: 'subscriptions', label: 'Subscriptions' },
-  { key: 'entertainment', label: 'Entertainment' },
+  { key: 'transportation', label: 'Gas & getting around' },
+  { key: 'entertainment', label: 'Fun & entertainment' },
+  { key: 'other', label: 'Everything else' },
 ] as const
 
 /** Mirrors RISK_PROFILE_RATES in lib/setup.ts — server is the authority. */
@@ -234,6 +238,9 @@ export function SetupWizard() {
             balance: String(item.balance),
             rate: item.interestRate === null ? '' : String(item.interestRate),
           })),
+          // An account with bills already set gets an empty list, not a
+          // default "Rent" row inviting a duplicate
+          bills: (loaded.recurringExpenseCount ?? 0) > 0 ? [] : previous.bills,
         }))
       } catch {
         // No setup API yet — the wizard still works for everything it can reach
@@ -314,9 +321,18 @@ export function SetupWizard() {
     }
 
     if (leaving === 'bills') {
-      const rows = answers.bills.filter(
-        row => !row.saved && row.name.trim() && Number(row.amount) > 0
+      // Same-name rows collapse to the first: entering "Rent" twice must not
+      // create two rent expenses
+      const seen = new Set(
+        answers.bills.filter(row => row.saved).map(row => row.name.trim().toLowerCase())
       )
+      const rows = answers.bills.filter(row => {
+        if (row.saved || !row.name.trim() || Number(row.amount) <= 0) return false
+        const key = row.name.trim().toLowerCase()
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
       const savedNames: string[] = []
       for (const row of rows) {
         const ok = await post('/api/recurring', {
@@ -529,14 +545,21 @@ export function SetupWizard() {
               {step === 'spending' && (
                 <SpendingStep answers={answers} setAnswers={setAnswers} prefill={prefill} />
               )}
-              {step === 'bills' && <BillsStep answers={answers} setAnswers={setAnswers} hasBusiness={hasBusiness} />}
+              {step === 'bills' && (
+                <BillsStep
+                  answers={answers}
+                  setAnswers={setAnswers}
+                  hasBusiness={hasBusiness}
+                  prefillBillCount={prefill?.recurringExpenseCount}
+                />
+              )}
               {step === 'investments' && (
                 <InvestmentsStep answers={answers} setAnswers={setAnswers} prefill={prefill} />
               )}
               {step === 'debts' && <DebtsStep answers={answers} setAnswers={setAnswers} />}
               {step === 'goals' && <GoalsStep answers={answers} setAnswers={setAnswers} />}
               {step === 'link' && <LinkStep prefill={prefill} hasBusiness={hasBusiness} />}
-              {step === 'done' && <DoneStep prefill={prefill} />}
+              {step === 'done' && <DoneStep />}
             </CardContent>
           </Card>
         </motion.div>
@@ -809,9 +832,17 @@ function IncomeStep({
     <div>
       <StepHeader
         icon={Wallet}
-        title="Your income"
-        subtitle="Roughly monthly is fine — bank data will sharpen it later."
+        title="What comes in each month?"
+        subtitle="Your best guess — the bank sharpens it later. Add a row for each source."
       />
+
+      {hasBusiness && (
+        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 mb-4 leading-relaxed">
+          <strong>Personal</strong> = money that lands in your pocket: a job, or
+          what you pay yourself from the business. <strong>Business</strong> =
+          what the company brings in from clients. If both apply, add both rows.
+        </div>
+      )}
 
       {existing > 0 && (
         <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 mb-4">
@@ -843,7 +874,7 @@ function IncomeStep({
                 onChange={event => update(index, { amount: event.target.value })}
               />
             </div>
-            {hasBusiness && (
+            {hasBusiness && !row.saved && (
               <div className="inline-flex p-0.5 bg-slate-100 rounded-md mb-0.5">
                 {(['personal', 'business'] as const).map(option => (
                   <button
@@ -858,6 +889,25 @@ function IncomeStep({
                   </button>
                 ))}
               </div>
+            )}
+            {row.saved ? (
+              <Check className="w-4 h-4 text-emerald-600 mb-2.5" />
+            ) : (
+              answers.incomeRows.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAnswers(a => ({
+                      ...a,
+                      incomeRows: a.incomeRows.filter((_, i) => i !== index),
+                    }))
+                  }
+                  className="text-slate-300 hover:text-red-500 mb-2 px-1"
+                  aria-label="Remove this source"
+                >
+                  ✕
+                </button>
+              )
             )}
           </div>
         ))}
@@ -957,7 +1007,7 @@ function SpendingStep({
       <StepHeader
         icon={PiggyBank}
         title="What do you think you spend?"
-        subtitle="Honest guesses. Once your bank data lands, FREM shows you how close you were — that gap is the whole point."
+        subtitle="Just the variable stuff — groceries, eating out, fun. Fixed bills like rent come on the next screen. Honest guesses; the bank will grade them."
       />
 
       {(prefill?.estimateCount ?? 0) > 0 && (
@@ -1004,10 +1054,12 @@ function BillsStep({
   answers,
   setAnswers,
   hasBusiness,
+  prefillBillCount,
 }: {
   answers: Answers
   setAnswers: React.Dispatch<React.SetStateAction<Answers>>
   hasBusiness: boolean
+  prefillBillCount?: number
 }) {
   const update = (index: number, patch: Partial<BillRow>) =>
     setAnswers(a => ({
@@ -1020,8 +1072,18 @@ function BillsStep({
       <StepHeader
         icon={Landmark}
         title="Your fixed monthly bills"
-        subtitle="Rent, insurance, the subscriptions you actually keep — the predictable stuff with a name and a date."
+        subtitle="The predictable, same-every-month stuff: rent, utilities, insurance, subscriptions. Variable spending was the last screen — don't repeat it here."
       />
+
+      {(prefillBillCount ?? 0) > 0 && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 mb-4">
+          <Check className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            {prefillBillCount} bill{prefillBillCount === 1 ? '' : 's'} already set up. Add more or
+            just continue.
+          </span>
+        </div>
+      )}
 
       <div className="space-y-3">
         {answers.bills.map((row, index) => (
@@ -1086,7 +1148,23 @@ function BillsStep({
                 ))}
               </div>
             )}
-            {row.saved && <Check className="w-4 h-4 text-emerald-600 mb-2.5" />}
+            {row.saved ? (
+              <Check className="w-4 h-4 text-emerald-600 mb-2.5" />
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  setAnswers(a => ({
+                    ...a,
+                    bills: a.bills.filter((_, i) => i !== index),
+                  }))
+                }
+                className="text-slate-300 hover:text-red-500 mb-2 px-1"
+                aria-label="Remove this bill"
+              >
+                ✕
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -1315,6 +1393,18 @@ function DebtsStep({
   )
 }
 
+const GOAL_TIMELINES = [
+  { months: 6, label: '6 months' },
+  { months: 12, label: '1 year' },
+  { months: 18, label: '18 months' },
+  { months: 24, label: '2 years' },
+  { months: 36, label: '3 years' },
+  { months: 60, label: '5 years' },
+  { months: 120, label: '10 years' },
+  { months: 240, label: '20 years' },
+  { months: 360, label: '30 years' },
+] as const
+
 function GoalsStep({
   answers,
   setAnswers,
@@ -1374,7 +1464,7 @@ function GoalsStep({
               </button>
 
               {pick.enabled && (
-                <div className="flex items-center gap-3 mt-3">
+                <div className="flex items-center gap-3 mt-3 flex-wrap">
                   <div className="relative w-32">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
                       $
@@ -1394,9 +1484,26 @@ function GoalsStep({
                       }
                     />
                   </div>
-                  <span className="text-xs text-slate-500">
-                    by ~{Math.round(pick.months / 12)} year{pick.months >= 24 ? 's' : ''} out
-                  </span>
+                  <span className="text-xs text-slate-500">by</span>
+                  <select
+                    value={pick.months}
+                    onChange={event =>
+                      setAnswers(a => ({
+                        ...a,
+                        goals: {
+                          ...a.goals,
+                          [template.key]: { ...pick, months: Number(event.target.value) },
+                        },
+                      }))
+                    }
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900"
+                  >
+                    {GOAL_TIMELINES.map(option => (
+                      <option key={option.months} value={option.months}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
             </div>
@@ -1451,30 +1558,82 @@ function LinkStep({ prefill, hasBusiness }: { prefill: Prefill | null; hasBusine
   )
 }
 
-function DoneStep({ prefill }: { prefill: Prefill | null }) {
+function DoneStep() {
+  // A receipt, not a promise: re-fetch the account and show exactly what is
+  // stored right now. "Did it really save?" deserves numbers, not reassurance.
+  const [receipt, setReceipt] = useState<{
+    incomeSourceCount: number
+    estimateCount: number
+    recurringExpenseCount?: number
+    activeGoalCount: number
+    accountCount: number
+    investments: unknown[]
+    liabilities: unknown[]
+    hasBankData: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/setup')
+      .then(response => (response.ok ? response.json() : null))
+      .then(data => {
+        if (!cancelled && data?.prefill) setReceipt(data.prefill)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const lines = receipt
+    ? [
+        { count: receipt.incomeSourceCount, label: 'income sources' },
+        { count: receipt.estimateCount, label: 'spending budgets' },
+        { count: receipt.recurringExpenseCount ?? 0, label: 'monthly bills' },
+        { count: receipt.activeGoalCount, label: 'active goals' },
+        { count: receipt.investments.length, label: 'investment accounts' },
+        { count: receipt.liabilities.length, label: 'debts tracked' },
+        { count: receipt.accountCount, label: 'bank accounts linked' },
+      ].filter(line => line.count > 0)
+    : []
+
   return (
     <div>
       <StepHeader
         icon={Check}
-        title="You're set"
-        subtitle="Here's what happens next — all of it automatic."
+        title="Saved. Here's the receipt."
+        subtitle="Everything below is already stored — each step saved as you finished it."
       />
-      <ul className="space-y-2.5 text-sm text-slate-600">
-        {prefill?.hasBankData && (
-          <li className="flex gap-2">
-            <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-            Your transactions get categorized right now — anything uncertain lands in the Review tab
-          </li>
-        )}
-        <li className="flex gap-2">
+
+      {receipt === null ? (
+        <div className="flex justify-center py-6">
+          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+        </div>
+      ) : lines.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          Nothing recorded yet — you skipped through, which is fine. Everything
+          here can be set up later from the app.
+        </p>
+      ) : (
+        <ul className="grid grid-cols-2 gap-x-6 gap-y-2.5">
+          {lines.map(line => (
+            <li key={line.label} className="flex gap-2 text-sm text-slate-700">
+              <Check className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+              <span>
+                <span className="font-semibold tabular-nums">{line.count}</span> {line.label}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {receipt?.hasBankData && (
+        <p className="mt-6 text-sm text-slate-500 flex gap-2">
           <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-          Your spending guesses become budgets — the Budget tab shows guess vs reality
-        </li>
-        <li className="flex gap-2">
-          <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-          Goals start drawing from your measured surplus, not wishful thinking
-        </li>
-      </ul>
+          Your transactions are being categorized now — anything uncertain
+          lands in the Review tab.
+        </p>
+      )}
     </div>
   )
 }
