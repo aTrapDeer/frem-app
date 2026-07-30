@@ -441,8 +441,8 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
   const now = getCurrentTimestamp()
   
   await db.execute({
-    sql: `INSERT INTO financial_goals (id, user_id, title, description, target_amount, current_amount, category, start_date, deadline, interest_rate, linked_account_id, linked_account_kind, allocation_percent, priority, urgency_score, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO financial_goals (id, user_id, title, description, target_amount, current_amount, category, start_date, deadline, interest_rate, linked_account_id, linked_account_kind, allocation_percent, priority, urgency_score, status, entity, entity_label, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       goal.user_id,
@@ -460,6 +460,8 @@ export const createGoal = async (goal: Omit<Goal, 'id' | 'created_at' | 'updated
       goal.priority ?? 'medium',
       goal.urgency_score ?? 3, // Default to 3 (medium urgency)
       goal.status ?? 'active',
+      goal.entity ?? 'personal',
+      goal.entity_label ?? null,
       now,
       now
     ]
@@ -501,6 +503,14 @@ export const updateGoal = async (userId: string, id: string, updates: Partial<Go
   if (updates.title !== undefined) {
     fields.push('title = ?')
     args.push(updates.title)
+  }
+  if (updates.entity !== undefined) {
+    fields.push('entity = ?')
+    args.push(updates.entity)
+  }
+  if (updates.entity_label !== undefined) {
+    fields.push('entity_label = ?')
+    args.push(updates.entity_label)
   }
   if (updates.description !== undefined) {
     fields.push('description = ?')
@@ -742,8 +752,8 @@ export const createRecurringExpense = async (expense: Omit<RecurringExpense, 'id
   const now = getCurrentTimestamp()
   
   await db.execute({
-    sql: `INSERT INTO recurring_expenses (id, user_id, name, description, amount, category, due_date, status, auto_pay, reminder_enabled, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO recurring_expenses (id, user_id, name, description, amount, category, due_date, status, auto_pay, reminder_enabled, entity, entity_label, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       expense.user_id,
@@ -755,6 +765,8 @@ export const createRecurringExpense = async (expense: Omit<RecurringExpense, 'id
       expense.status ?? 'active',
       expense.auto_pay ? 1 : 0,
       expense.reminder_enabled !== false ? 1 : 0,
+      expense.entity ?? 'personal',
+      expense.entity_label ?? null,
       now,
       now
     ]
@@ -789,6 +801,14 @@ export const updateRecurringExpense = async (userId: string, id: string, updates
   if (updates.name !== undefined) {
     fields.push('name = ?')
     args.push(updates.name)
+  }
+  if (updates.entity !== undefined) {
+    fields.push('entity = ?')
+    args.push(updates.entity)
+  }
+  if (updates.entity_label !== undefined) {
+    fields.push('entity_label = ?')
+    args.push(updates.entity_label)
   }
   if (updates.description !== undefined) {
     fields.push('description = ?')
@@ -1985,10 +2005,10 @@ export const createIncomeSource = async (source: Omit<IncomeSource, 'id' | 'crea
       base_amount, hours_per_week, is_commission_based,
       commission_high, commission_low, commission_frequency_per_period,
       estimated_monthly_low, estimated_monthly_mid, estimated_monthly_high,
-      status, start_date, end_date,
+      status, entity, entity_label, start_date, end_date,
       initial_payment, final_payment, final_payment_date,
       is_primary, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id, source.user_id, source.name, source.description || null,
       source.income_type, source.pay_frequency,
@@ -1998,6 +2018,7 @@ export const createIncomeSource = async (source: Omit<IncomeSource, 'id' | 'crea
       source.commission_frequency_per_period || 0,
       estimates.low, estimates.mid, estimates.high,
       source.status || 'active',
+      source.entity ?? 'personal', source.entity_label ?? null,
       source.start_date || null, source.end_date || null,
       source.initial_payment || 0, source.final_payment || 0,
       source.final_payment_date || null,
@@ -2028,7 +2049,7 @@ export const updateIncomeSource = async (userId: string, id: string, updates: Pa
     'commission_high', 'commission_low', 'commission_frequency_per_period',
     'status', 'start_date', 'end_date',
     'initial_payment', 'final_payment', 'final_payment_date',
-    'is_primary'
+    'is_primary', 'entity', 'entity_label'
   ]
   
   for (const [key, value] of Object.entries(updates)) {
@@ -2045,7 +2066,8 @@ export const updateIncomeSource = async (userId: string, id: string, updates: Pa
   // Always update estimates and timestamp
   fields.push('estimated_monthly_low = ?', 'estimated_monthly_mid = ?', 'estimated_monthly_high = ?', 'updated_at = ?')
   values.push(estimates.low, estimates.mid, estimates.high, now)
-  values.push(id)
+  // WHERE id = ? AND user_id = ? — both placeholders need values
+  values.push(id, userId)
   
   await db.execute({
     sql: `UPDATE income_sources SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,

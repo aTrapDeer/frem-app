@@ -15,16 +15,6 @@ const ACCOUNT_TYPES = new Set(['401k', 'ira', 'roth', 'brokerage', 'hsa', 'other
 const RISK_PROFILES = new Set(['conservative', 'index', 'aggressive'])
 const ENTITIES = new Set(['personal', 'business'])
 
-type Row = {
-  id: string
-  label: string | null
-  account_type: string
-  balance: number
-  risk_profile: string
-  entity: string
-  updated_at: string
-}
-
 function toDto(row: Record<string, unknown>) {
   return {
     id: String(row.id),

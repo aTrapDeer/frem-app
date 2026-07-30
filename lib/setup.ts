@@ -54,6 +54,7 @@ export type SetupStatus = {
     } | null
     incomeSourceCount: number
     estimateCount: number
+    estimates: Array<{ category: string; monthlyEstimate: number; entity: string }>
     recurringExpenseCount: number
     activeGoalCount: number
     hasBankData: boolean
@@ -342,6 +343,13 @@ export async function getSetupStatus(userId: string): Promise<SetupStatus> {
       }
     : null
 
+  const estimateRows = await db
+    .execute({
+      sql: 'SELECT category, monthly_estimate, entity FROM spending_estimates WHERE user_id = ?',
+      args: [userId],
+    })
+    .catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
+
   return {
     completed: settings?.setup_completed_at != null,
     savedState: parseJson(settings?.setup_state),
@@ -352,6 +360,11 @@ export async function getSetupStatus(userId: string): Promise<SetupStatus> {
       businessProfile,
       incomeSourceCount,
       estimateCount,
+      estimates: estimateRows.rows.map(row => ({
+        category: String((row as Record<string, unknown>).category),
+        monthlyEstimate: Number((row as Record<string, unknown>).monthly_estimate),
+        entity: String((row as Record<string, unknown>).entity),
+      })),
       recurringExpenseCount,
       activeGoalCount,
       hasBankData: bankTransactionCount > 0,

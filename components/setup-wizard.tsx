@@ -53,20 +53,31 @@ type StepId =
   | 'done'
 
 interface IncomeRow {
+  /** Present once the row exists server-side; edits PUT, new rows POST. */
+  id?: string
   name: string
   amount: string
   entity: Entity
-  /** Set after a successful save — re-advancing must never post the row twice. */
-  saved?: boolean
+  /** A saved row was edited and needs a PUT on the next Continue. */
+  dirty?: boolean
 }
 
 interface BillRow {
+  id?: string
   name: string
   amount: string
   day: string
   category: 'housing' | 'utilities' | 'entertainment' | 'health' | 'transportation' | 'food' | 'subscriptions' | 'insurance' | 'other'
   entity: Entity
-  saved?: boolean
+  dirty?: boolean
+}
+
+interface ExistingGoal {
+  id: string
+  title: string
+  amount: string
+  months: number
+  dirty?: boolean
 }
 
 interface InvestmentRow {
@@ -98,6 +109,7 @@ interface Answers {
   taxState: string
   estimates: Record<string, string>
   bills: BillRow[]
+  existingGoals: ExistingGoal[]
   investments: InvestmentRow[]
   liabilities: LiabilityRow[]
   goals: Record<string, GoalPick>
@@ -111,6 +123,7 @@ interface Prefill {
   incomeSourceCount: number
   estimateCount: number
   activeGoalCount: number
+  estimates?: Array<{ category: string; monthlyEstimate: number; entity: string }>
   recurringExpenseCount?: number
   hasBankData: boolean
   accountCount: number
@@ -168,6 +181,7 @@ const DEFAULT_ANSWERS: Answers = {
   taxState: '',
   estimates: {},
   bills: [{ name: 'Rent', amount: '', day: '1', category: 'housing', entity: 'personal' }],
+  existingGoals: [],
   investments: [],
   liabilities: [],
   goals: {
@@ -211,14 +225,105 @@ export function SetupWizard() {
 
     async function load() {
       try {
-        const response = await fetch('/api/setup')
-        if (!response.ok || cancelled) return
-        const data = await response.json()
-        const loaded: Prefill = data.prefill
+        const [setupRes, incomeRes, billsRes, goalsRes] = await Promise.all([
+          fetch('/api/setup'),
+          fetch('/api/income-sources'),
+          fetch('/api/recurring'),
+          fetch('/api/goals'),
+        ])
+        if (cancelled || !setupRes.ok) return
 
+        const data = await setupRes.json()
+        const loaded: Prefill = data.prefill
         setPrefill(loaded)
         setAlreadyCompleted(Boolean(data.completed))
 
+        // Existing rows become editable rows — the wizard reviews, not re-asks
+        let incomeRows: IncomeRow[] = []
+        if (incomeRes.ok) {
+          const sources = (await incomeRes.json()) as Array<{
+            id: string
+            name: string
+            base_amount: number
+            estimated_monthly_mid: number
+            entity?: Entity
+            status: string
+          }>
+          incomeRows = sources
+            .filter(source => source.status === 'active')
+            .map(source => ({
+              id: source.id,
+              name: source.name,
+              amount: String(source.base_amount || source.estimated_monthly_mid || ''),
+              entity: source.entity ?? 'personal',
+            }))
+        }
+        incomeRows.push({ name: '', amount: '', entity: 'personal' })
+
+        let bills: BillRow[] = []
+        if (billsRes.ok) {
+          const expenses = (await billsRes.json()) as Array<{
+            id: string
+            name: string
+            amount: number
+            category: BillRow['category']
+            due_date: number
+            entity?: Entity
+          }>
+          bills = expenses.map(expense => ({
+            id: expense.id,
+            name: expense.name,
+            amount: String(expense.amount),
+            day: String(expense.due_date || 1),
+            category: expense.category ?? 'other',
+            entity: expense.entity ?? 'personal',
+          }))
+        }
+        if (bills.length === 0) {
+          bills.push({ name: 'Rent', amount: '', day: '1', category: 'housing', entity: 'personal' })
+        }
+
+        let existingGoals: ExistingGoal[] = []
+        if (goalsRes.ok) {
+          const goals = (await goalsRes.json()) as Array<{
+            id: string
+            title: string
+            target_amount: number
+            deadline: string
+            status: string
+          }>
+          existingGoals = goals
+            .filter(goal => goal.status === 'active')
+            .map(goal => {
+              const monthsOut = Math.max(
+                1,
+                Math.round(
+                  (new Date(goal.deadline).getTime() - Date.now()) / (30.44 * 86_400_000)
+                )
+              )
+              const snapped = GOAL_TIMELINES.reduce((best, option) =>
+                Math.abs(option.months - monthsOut) < Math.abs(best.months - monthsOut)
+                  ? option
+                  : best
+              )
+              return {
+                id: goal.id,
+                title: goal.title,
+                amount: String(goal.target_amount),
+                months: snapped.months,
+              }
+            })
+        }
+
+        // Spending guesses persist between visits instead of wiping
+        const estimates: Record<string, string> = {}
+        for (const estimate of loaded.estimates ?? []) {
+          if (estimate.entity === 'personal') {
+            estimates[estimate.category] = String(estimate.monthlyEstimate)
+          }
+        }
+
+        if (cancelled) return
         setAnswers(previous => ({
           ...previous,
           earningTypes: (loaded.earningTypes as EarningType[]) ?? [],
@@ -238,9 +343,10 @@ export function SetupWizard() {
             balance: String(item.balance),
             rate: item.interestRate === null ? '' : String(item.interestRate),
           })),
-          // An account with bills already set gets an empty list, not a
-          // default "Rent" row inviting a duplicate
-          bills: (loaded.recurringExpenseCount ?? 0) > 0 ? [] : previous.bills,
+          incomeRows,
+          bills,
+          existingGoals,
+          estimates: Object.keys(estimates).length > 0 ? estimates : previous.estimates,
         }))
       } catch {
         // No setup API yet — the wizard still works for everything it can reach
@@ -292,64 +398,130 @@ export function SetupWizard() {
     }
 
     if (leaving === 'income') {
-      // Only rows never saved before — going back and continuing again used to
-      // create a duplicate income source on every pass
-      const rows = answers.incomeRows.filter(
-        row => !row.saved && row.name.trim() && Number(row.amount) > 0
-      )
-      const savedNames: string[] = []
-      for (const row of rows) {
-        const ok = await post('/api/income-sources', {
-          name: row.name.trim(),
-          income_type: row.entity === 'business' ? 'business' : 'salary',
-          pay_frequency: 'monthly',
-          base_amount: Number(row.amount),
-          entity: row.entity,
-          is_primary: rows.indexOf(row) === 0 && (prefill?.incomeSourceCount ?? 0) === 0,
-          status: 'active',
-        })
-        if (ok) savedNames.push(row.name)
+      const assignments: Array<{ index: number; id: string }> = []
+      const seen = new Set<string>()
+
+      for (let index = 0; index < answers.incomeRows.length; index += 1) {
+        const row = answers.incomeRows[index]
+        const amount = Number(row.amount)
+        const key = row.name.trim().toLowerCase()
+        if (!key || !(amount > 0)) continue
+
+        if (row.id) {
+          seen.add(key)
+          if (row.dirty) {
+            await fetch('/api/income-sources', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: row.id,
+                name: row.name.trim(),
+                base_amount: amount,
+                entity: row.entity,
+              }),
+            }).catch(() => undefined)
+          }
+          continue
+        }
+
+        if (seen.has(key)) continue // same name twice never posts twice
+        seen.add(key)
+
+        try {
+          const response = await fetch('/api/income-sources', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: row.name.trim(),
+              // 'business' is not a valid income_type in the schema — business
+              // revenue is recorded as freelance-type income tagged business
+              income_type: row.entity === 'business' ? 'freelance' : 'salary',
+              pay_frequency: 'monthly',
+              base_amount: amount,
+              entity: row.entity,
+              status: 'active',
+            }),
+          })
+          if (response.ok) {
+            const created = (await response.json()) as { id?: string }
+            if (created?.id) assignments.push({ index, id: created.id })
+          }
+        } catch {
+          // Row stays unsaved and will retry on the next pass
+        }
       }
-      if (savedNames.length > 0) {
+
+      if (assignments.length > 0) {
         setAnswers(a => ({
           ...a,
-          incomeRows: a.incomeRows.map(row =>
-            savedNames.includes(row.name) ? { ...row, saved: true } : row
-          ),
+          incomeRows: a.incomeRows.map((row, index) => {
+            const hit = assignments.find(entry => entry.index === index)
+            return hit ? { ...row, id: hit.id, dirty: false } : row
+          }),
         }))
       }
     }
 
     if (leaving === 'bills') {
-      // Same-name rows collapse to the first: entering "Rent" twice must not
-      // create two rent expenses
-      const seen = new Set(
-        answers.bills.filter(row => row.saved).map(row => row.name.trim().toLowerCase())
-      )
-      const rows = answers.bills.filter(row => {
-        if (row.saved || !row.name.trim() || Number(row.amount) <= 0) return false
+      const assignments: Array<{ index: number; id: string }> = []
+      const seen = new Set<string>()
+
+      for (let index = 0; index < answers.bills.length; index += 1) {
+        const row = answers.bills[index]
+        const amount = Number(row.amount)
         const key = row.name.trim().toLowerCase()
-        if (seen.has(key)) return false
+        if (!key || !(amount > 0)) continue
+
+        if (row.id) {
+          seen.add(key)
+          if (row.dirty) {
+            await fetch('/api/recurring', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: row.id,
+                name: row.name.trim(),
+                amount,
+                category: row.category,
+                due_date: Math.min(Math.max(Number(row.day) || 1, 1), 28),
+                entity: row.entity,
+              }),
+            }).catch(() => undefined)
+          }
+          continue
+        }
+
+        if (seen.has(key)) continue
         seen.add(key)
-        return true
-      })
-      const savedNames: string[] = []
-      for (const row of rows) {
-        const ok = await post('/api/recurring', {
-          name: row.name.trim(),
-          amount: Number(row.amount),
-          category: row.category,
-          due_date: Math.min(Math.max(Number(row.day) || 1, 1), 28),
-          entity: row.entity,
-        })
-        if (ok) savedNames.push(row.name)
+
+        try {
+          const response = await fetch('/api/recurring', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: row.name.trim(),
+              amount,
+              category: row.category,
+              due_date: Math.min(Math.max(Number(row.day) || 1, 1), 28),
+              entity: row.entity,
+            }),
+          })
+          if (response.ok) {
+            const created = (await response.json()) as { id?: string }
+            if (created?.id) assignments.push({ index, id: created.id })
+          }
+        } catch {
+          // Retry next pass
+        }
       }
-      if (savedNames.length > 0) {
+
+      if (assignments.length > 0) {
         setAnswers(a => ({
           ...a,
-          bills: a.bills.map(row =>
-            savedNames.includes(row.name) ? { ...row, saved: true } : row
-          ),
+          bills: a.bills.map((row, index) => {
+            const hit = assignments.find(entry => entry.index === index)
+            return hit ? { ...row, id: hit.id, dirty: false } : row
+          }),
         }))
       }
     }
@@ -404,6 +576,22 @@ export function SetupWizard() {
     }
 
     if (leaving === 'goals') {
+      // Edits to goals that already exist
+      for (const goal of answers.existingGoals) {
+        if (!goal.dirty) continue
+        const amount = Number(goal.amount)
+        if (!(amount > 0)) continue
+        await fetch('/api/goals', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: goal.id,
+            target_amount: amount,
+            deadline: addMonthsIso(goal.months),
+          }),
+        }).catch(() => undefined)
+      }
+
       const retirementRate =
         answers.investments.length > 0
           ? RISK_RATES[
@@ -419,9 +607,16 @@ export function SetupWizard() {
         retirement: { title: 'Retirement', category: 'investment', rate: retirementRate },
       }
 
+      const existingTitles = new Set(
+        answers.existingGoals.map(goal => goal.title.trim().toLowerCase())
+      )
+
       for (const [key, pick] of Object.entries(answers.goals)) {
         if (!pick.enabled || Number(pick.amount) <= 0) continue
         const template = templates[key]
+        // A template matching an existing goal edits nothing and adds nothing —
+        // enabling it twice must never create a second copy
+        if (existingTitles.has(template.title.toLowerCase())) continue
         await post('/api/goals', {
           title: template.title,
           target_amount: Number(pick.amount),
@@ -539,19 +734,14 @@ export function SetupWizard() {
                 <BusinessStep answers={answers} setAnswers={setAnswers} />
               )}
               {step === 'income' && (
-                <IncomeStep answers={answers} setAnswers={setAnswers} prefill={prefill} hasBusiness={hasBusiness} />
+                <IncomeStep answers={answers} setAnswers={setAnswers} hasBusiness={hasBusiness} />
               )}
               {step === 'tax' && <TaxStep answers={answers} setAnswers={setAnswers} />}
               {step === 'spending' && (
                 <SpendingStep answers={answers} setAnswers={setAnswers} prefill={prefill} />
               )}
               {step === 'bills' && (
-                <BillsStep
-                  answers={answers}
-                  setAnswers={setAnswers}
-                  hasBusiness={hasBusiness}
-                  prefillBillCount={prefill?.recurringExpenseCount}
-                />
+                <BillsStep answers={answers} setAnswers={setAnswers} hasBusiness={hasBusiness} />
               )}
               {step === 'investments' && (
                 <InvestmentsStep answers={answers} setAnswers={setAnswers} prefill={prefill} />
@@ -812,28 +1002,35 @@ function BusinessStep({
 function IncomeStep({
   answers,
   setAnswers,
-  prefill,
   hasBusiness,
 }: {
   answers: Answers
   setAnswers: React.Dispatch<React.SetStateAction<Answers>>
-  prefill: Prefill | null
   hasBusiness: boolean
 }) {
-  const existing = prefill?.incomeSourceCount ?? 0
-
   const update = (index: number, patch: Partial<IncomeRow>) =>
     setAnswers(a => ({
       ...a,
-      incomeRows: a.incomeRows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+      incomeRows: a.incomeRows.map((row, i) =>
+        i === index ? { ...row, ...patch, dirty: row.id ? true : row.dirty } : row
+      ),
     }))
+
+  const removeRow = async (index: number) => {
+    const row = answers.incomeRows[index]
+    if (row.id) {
+      // Saved rows are deleted server-side too, immediately
+      await fetch(`/api/income-sources?id=${row.id}`, { method: 'DELETE' }).catch(() => undefined)
+    }
+    setAnswers(a => ({ ...a, incomeRows: a.incomeRows.filter((_, i) => i !== index) }))
+  }
 
   return (
     <div>
       <StepHeader
         icon={Wallet}
         title="What comes in each month?"
-        subtitle="Your best guess — the bank sharpens it later. Add a row for each source."
+        subtitle="Everything you already set up is shown below — edit, remove, or add. Changes save when you continue."
       />
 
       {hasBusiness && (
@@ -844,19 +1041,9 @@ function IncomeStep({
         </div>
       )}
 
-      {existing > 0 && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 mb-4">
-          <Check className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>
-            {existing} income source{existing === 1 ? '' : 's'} already set up. Add more below or
-            just continue.
-          </span>
-        </div>
-      )}
-
       <div className="space-y-3">
         {answers.incomeRows.map((row, index) => (
-          <div key={index} className="flex gap-2 items-end flex-wrap">
+          <div key={row.id ?? `new-${index}`} className="flex gap-2 items-end flex-wrap">
             <div className="space-y-1.5 flex-1 min-w-[140px]">
               <Label className="text-slate-700 text-xs">Source</Label>
               <Input
@@ -874,7 +1061,7 @@ function IncomeStep({
                 onChange={event => update(index, { amount: event.target.value })}
               />
             </div>
-            {hasBusiness && !row.saved && (
+            {hasBusiness && (
               <div className="inline-flex p-0.5 bg-slate-100 rounded-md mb-0.5">
                 {(['personal', 'business'] as const).map(option => (
                   <button
@@ -890,25 +1077,27 @@ function IncomeStep({
                 ))}
               </div>
             )}
-            {row.saved ? (
-              <Check className="w-4 h-4 text-emerald-600 mb-2.5" />
-            ) : (
-              answers.incomeRows.length > 1 && (
+            <div className="flex items-center gap-1 mb-2">
+              {row.id && !row.dirty && (
+                <Check className="w-4 h-4 text-emerald-600" aria-label="Saved" />
+              )}
+              {row.id && row.dirty && (
+                <span
+                  className="w-2 h-2 rounded-full bg-amber-500"
+                  title="Edited — saves when you continue"
+                />
+              )}
+              {(row.id || answers.incomeRows.length > 1) && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setAnswers(a => ({
-                      ...a,
-                      incomeRows: a.incomeRows.filter((_, i) => i !== index),
-                    }))
-                  }
-                  className="text-slate-300 hover:text-red-500 mb-2 px-1"
+                  onClick={() => removeRow(index)}
+                  className="text-slate-300 hover:text-red-500 px-1"
                   aria-label="Remove this source"
                 >
                   ✕
                 </button>
-              )
-            )}
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -928,6 +1117,7 @@ function IncomeStep({
     </div>
   )
 }
+
 
 function TaxStep({
   answers,
@@ -1054,46 +1244,48 @@ function BillsStep({
   answers,
   setAnswers,
   hasBusiness,
-  prefillBillCount,
 }: {
   answers: Answers
   setAnswers: React.Dispatch<React.SetStateAction<Answers>>
   hasBusiness: boolean
-  prefillBillCount?: number
 }) {
   const update = (index: number, patch: Partial<BillRow>) =>
     setAnswers(a => ({
       ...a,
-      bills: a.bills.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+      bills: a.bills.map((row, i) =>
+        i === index ? { ...row, ...patch, dirty: row.id ? true : row.dirty } : row
+      ),
     }))
+
+  const removeRow = async (index: number) => {
+    const row = answers.bills[index]
+    if (row.id) {
+      // Recurring expenses soft-cancel rather than hard-delete
+      await fetch('/api/recurring', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, status: 'cancelled' }),
+      }).catch(() => undefined)
+    }
+    setAnswers(a => ({ ...a, bills: a.bills.filter((_, i) => i !== index) }))
+  }
 
   return (
     <div>
       <StepHeader
         icon={Landmark}
         title="Your fixed monthly bills"
-        subtitle="The predictable, same-every-month stuff: rent, utilities, insurance, subscriptions. Variable spending was the last screen — don't repeat it here."
+        subtitle="Same-every-month stuff: rent, utilities, insurance, subscriptions. Everything already set up is shown — edit, remove, or add."
       />
-
-      {(prefillBillCount ?? 0) > 0 && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 mb-4">
-          <Check className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>
-            {prefillBillCount} bill{prefillBillCount === 1 ? '' : 's'} already set up. Add more or
-            just continue.
-          </span>
-        </div>
-      )}
 
       <div className="space-y-3">
         {answers.bills.map((row, index) => (
-          <div key={index} className="flex gap-2 items-end flex-wrap">
+          <div key={row.id ?? `new-${index}`} className="flex gap-2 items-end flex-wrap">
             <div className="space-y-1.5 flex-1 min-w-[110px]">
               <Label className="text-slate-700 text-xs">Bill</Label>
               <Input
                 placeholder="e.g. Rent"
                 value={row.name}
-                disabled={row.saved}
                 onChange={event => update(index, { name: event.target.value })}
               />
             </div>
@@ -1103,7 +1295,6 @@ function BillsStep({
                 inputMode="decimal"
                 placeholder="0"
                 value={row.amount}
-                disabled={row.saved}
                 onChange={event => update(index, { amount: event.target.value })}
               />
             </div>
@@ -1113,7 +1304,6 @@ function BillsStep({
                 inputMode="numeric"
                 placeholder="1"
                 value={row.day}
-                disabled={row.saved}
                 onChange={event => update(index, { day: event.target.value })}
               />
             </div>
@@ -1121,9 +1311,8 @@ function BillsStep({
               <Label className="text-slate-700 text-xs">Category</Label>
               <select
                 value={row.category}
-                disabled={row.saved}
                 onChange={event => update(index, { category: event.target.value as BillRow['category'] })}
-                className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm disabled:opacity-60"
+                className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm"
               >
                 {BILL_CATEGORIES.map(option => (
                   <option key={option} value={option}>
@@ -1132,7 +1321,7 @@ function BillsStep({
                 ))}
               </select>
             </div>
-            {hasBusiness && !row.saved && (
+            {hasBusiness && (
               <div className="inline-flex p-0.5 bg-slate-100 rounded-md mb-0.5">
                 {(['personal', 'business'] as const).map(option => (
                   <button
@@ -1148,23 +1337,20 @@ function BillsStep({
                 ))}
               </div>
             )}
-            {row.saved ? (
-              <Check className="w-4 h-4 text-emerald-600 mb-2.5" />
-            ) : (
+            <div className="flex items-center gap-1 mb-2">
+              {row.id && !row.dirty && <Check className="w-4 h-4 text-emerald-600" aria-label="Saved" />}
+              {row.id && row.dirty && (
+                <span className="w-2 h-2 rounded-full bg-amber-500" title="Edited — saves when you continue" />
+              )}
               <button
                 type="button"
-                onClick={() =>
-                  setAnswers(a => ({
-                    ...a,
-                    bills: a.bills.filter((_, i) => i !== index),
-                  }))
-                }
-                className="text-slate-300 hover:text-red-500 mb-2 px-1"
+                onClick={() => removeRow(index)}
+                className="text-slate-300 hover:text-red-500 px-1"
                 aria-label="Remove this bill"
               >
                 ✕
               </button>
-            )}
+            </div>
           </div>
         ))}
       </div>
@@ -1188,6 +1374,7 @@ function BillsStep({
     </div>
   )
 }
+
 
 function InvestmentsStep({
   answers,
@@ -1413,106 +1600,162 @@ function GoalsStep({
   setAnswers: React.Dispatch<React.SetStateAction<Answers>>
 }) {
   const templates = [
-    { key: 'emergency', label: '🛟 3-month emergency fund', hint: 'The first goal worth having' },
-    { key: 'debt', label: '💳 Pay off debt', hint: 'Prefilled from what you just entered' },
-    { key: 'house', label: '🏠 House down payment', hint: 'Ties into the mortgage-readiness math' },
-    { key: 'retirement', label: '🌴 Retirement', hint: 'Uses your investment growth rate' },
+    { key: 'emergency', title: '3-Month Emergency Fund', label: '🛟 3-month emergency fund', hint: 'The first goal worth having' },
+    { key: 'debt', title: 'Pay Off Debt', label: '💳 Pay off debt', hint: 'Prefilled from what you just entered' },
+    { key: 'house', title: 'House Down Payment', label: '🏠 House down payment', hint: 'Ties into the mortgage-readiness math' },
+    { key: 'retirement', title: 'Retirement', label: '🌴 Retirement', hint: 'Uses your investment growth rate' },
   ] as const
+
+  const existingTitles = new Set(answers.existingGoals.map(goal => goal.title.trim().toLowerCase()))
+  const available = templates.filter(template => !existingTitles.has(template.title.toLowerCase()))
+
+  const updateExisting = (id: string, patch: Partial<ExistingGoal>) =>
+    setAnswers(a => ({
+      ...a,
+      existingGoals: a.existingGoals.map(goal =>
+        goal.id === id ? { ...goal, ...patch, dirty: true } : goal
+      ),
+    }))
 
   return (
     <div>
       <StepHeader
         icon={Target}
-        title="Pick your goals"
-        subtitle="Your surplus gets allocated across these automatically. Amounts are editable — and changeable later."
+        title="Your goals"
+        subtitle="What you already have is shown first — tweak amounts and timelines freely. Your surplus gets allocated across all of them."
       />
 
-      <div className="space-y-2.5">
-        {templates.map(template => {
-          const pick = answers.goals[template.key]
-          return (
-            <div
-              key={template.key}
-              className={`p-4 rounded-xl border transition-colors ${
-                pick.enabled ? 'border-blue-600 bg-blue-50' : 'border-slate-200'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  setAnswers(a => ({
-                    ...a,
-                    goals: {
-                      ...a.goals,
-                      [template.key]: { ...pick, enabled: !pick.enabled },
-                    },
-                  }))
-                }
-                className="w-full flex items-center justify-between gap-3 text-left"
-              >
-                <span>
-                  <span className="block text-sm font-medium text-slate-900">{template.label}</span>
-                  <span className="block text-xs text-slate-500 mt-0.5">{template.hint}</span>
-                </span>
-                <span
-                  className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
-                    pick.enabled ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
+      {answers.existingGoals.length > 0 && (
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2.5">
+            Already set up
+          </p>
+          <div className="space-y-2.5">
+            {answers.existingGoals.map(goal => (
+              <div key={goal.id} className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <span className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    {goal.title}
+                    {goal.dirty && (
+                      <span className="w-2 h-2 rounded-full bg-amber-500" title="Edited — saves when you continue" />
+                    )}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-28">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                      <Input
+                        inputMode="decimal"
+                        className="pl-7 h-8"
+                        value={goal.amount}
+                        onChange={event => updateExisting(goal.id, { amount: event.target.value })}
+                      />
+                    </div>
+                    <span className="text-xs text-slate-500">by</span>
+                    <select
+                      value={goal.months}
+                      onChange={event => updateExisting(goal.id, { months: Number(event.target.value) })}
+                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900"
+                    >
+                      {GOAL_TIMELINES.map(option => (
+                        <option key={option.months} value={option.months}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {available.length > 0 && (
+        <>
+          {answers.existingGoals.length > 0 && (
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2.5">
+              Add more
+            </p>
+          )}
+          <div className="space-y-2.5">
+            {available.map(template => {
+              const pick = answers.goals[template.key]
+              return (
+                <div
+                  key={template.key}
+                  className={`p-4 rounded-xl border transition-colors ${
+                    pick.enabled ? 'border-blue-600 bg-blue-50' : 'border-slate-200'
                   }`}
                 >
-                  {pick.enabled && <Check className="w-3 h-3 text-white" />}
-                </span>
-              </button>
-
-              {pick.enabled && (
-                <div className="flex items-center gap-3 mt-3 flex-wrap">
-                  <div className="relative w-32">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                      $
-                    </span>
-                    <Input
-                      inputMode="decimal"
-                      className="pl-7"
-                      value={pick.amount}
-                      onChange={event =>
-                        setAnswers(a => ({
-                          ...a,
-                          goals: {
-                            ...a.goals,
-                            [template.key]: { ...pick, amount: event.target.value },
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                  <span className="text-xs text-slate-500">by</span>
-                  <select
-                    value={pick.months}
-                    onChange={event =>
+                  <button
+                    type="button"
+                    onClick={() =>
                       setAnswers(a => ({
                         ...a,
-                        goals: {
-                          ...a.goals,
-                          [template.key]: { ...pick, months: Number(event.target.value) },
-                        },
+                        goals: { ...a.goals, [template.key]: { ...pick, enabled: !pick.enabled } },
                       }))
                     }
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900"
+                    className="w-full flex items-center justify-between gap-3 text-left"
                   >
-                    {GOAL_TIMELINES.map(option => (
-                      <option key={option.months} value={option.months}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    <span>
+                      <span className="block text-sm font-medium text-slate-900">{template.label}</span>
+                      <span className="block text-xs text-slate-500 mt-0.5">{template.hint}</span>
+                    </span>
+                    <span
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                        pick.enabled ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
+                      }`}
+                    >
+                      {pick.enabled && <Check className="w-3 h-3 text-white" />}
+                    </span>
+                  </button>
+
+                  {pick.enabled && (
+                    <div className="flex items-center gap-3 mt-3 flex-wrap">
+                      <div className="relative w-32">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                        <Input
+                          inputMode="decimal"
+                          className="pl-7"
+                          value={pick.amount}
+                          onChange={event =>
+                            setAnswers(a => ({
+                              ...a,
+                              goals: { ...a.goals, [template.key]: { ...pick, amount: event.target.value } },
+                            }))
+                          }
+                        />
+                      </div>
+                      <span className="text-xs text-slate-500">by</span>
+                      <select
+                        value={pick.months}
+                        onChange={event =>
+                          setAnswers(a => ({
+                            ...a,
+                            goals: { ...a.goals, [template.key]: { ...pick, months: Number(event.target.value) } },
+                          }))
+                        }
+                        className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900"
+                      >
+                        {GOAL_TIMELINES.map(option => (
+                          <option key={option.months} value={option.months}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }
+
 
 function LinkStep({ prefill, hasBusiness }: { prefill: Prefill | null; hasBusiness: boolean }) {
   const [linkedThisSession, setLinkedThisSession] = useState(0)
