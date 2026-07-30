@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { PrivacyToggle } from "@/components/privacy-toggle"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
@@ -158,7 +159,10 @@ export default function DashboardPage() {
       <main className="pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">Dashboard</h1>
+            <div className="flex items-center justify-between gap-4">
+              <h1 className="text-4xl font-bold text-slate-900 mb-2">Dashboard</h1>
+              <PrivacyToggle />
+            </div>
             <p className="text-slate-600">Welcome back! Here&apos;s your financial overview.</p>
           </motion.div>
 

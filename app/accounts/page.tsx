@@ -4,6 +4,8 @@ import { motion } from "framer-motion"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { BankConnections } from "@/components/bank-connections"
+import { ManualAccounts } from "@/components/manual-accounts"
+import { PrivacyToggle } from "@/components/privacy-toggle"
 import { Lock } from "lucide-react"
 
 export default function AccountsPage() {
@@ -29,9 +31,12 @@ export default function AccountsPage() {
                 </div>
 
                 {/* Reassurance belongs near the action, not in a banner above it */}
-                <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5">
-                  <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Read-only · encrypted</span>
+                <div className="flex items-center gap-3">
+                  <PrivacyToggle />
+                  <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5">
+                    <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Read-only · encrypted</span>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -42,6 +47,15 @@ export default function AccountsPage() {
               transition={{ duration: 0.6, delay: 0.15 }}
             >
               <BankConnections />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.25 }}
+              className="mt-8"
+            >
+              <ManualAccounts />
             </motion.div>
           </div>
         </main>

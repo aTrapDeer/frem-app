@@ -365,3 +365,11 @@ select:-webkit-autofill:focus {
   border-left-color: rgb(199 210 254);
   color: rgb(224 231 255);
 }
+
+/* Privacy mode: blur every monetary figure. Amounts opt in via the classes
+   the app already uses for money (font-numbers, tabular-nums). */
+body.privacy-hide .font-numbers,
+body.privacy-hide .tabular-nums {
+  filter: blur(8px);
+  user-select: none;
+}
