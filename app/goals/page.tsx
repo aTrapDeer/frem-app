@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { ArrowRight, ArrowLeft, Target, Edit, Trash2, TrendingUp, Calendar, AlertTriangle, CheckCircle2, Clock, Info } from "lucide-react"
+import { ArrowRight, ArrowLeft, Target, Edit, Trash2, TrendingUp, CheckCircle2, Info } from "lucide-react"
 import { SideProjects } from "@/components/side-projects"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -386,30 +386,6 @@ export default function GoalsPage() {
   }
   
   // Quick update urgency score without opening full modal
-  const handleQuickUrgencyUpdate = async (goalId: string, newScore: number) => {
-    try {
-      const response = await fetch('/api/goals', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: goalId, urgency_score: newScore })
-      })
-      
-      if (response.ok) {
-        const updatedGoal = await response.json()
-        setGoals(prev => prev.map(goal => 
-          goal.id === goalId ? updatedGoal : goal
-        ))
-        
-        // Refresh projections
-        const projectionsRes = await fetch('/api/projections')
-        if (projectionsRes.ok) {
-          setProjections(await projectionsRes.json())
-        }
-      }
-    } catch (error) {
-      console.error('Error updating urgency:', error)
-    }
-  }
 
   const handleCompleteGoal = async (goalId: string) => {
     if (!user) return
@@ -703,45 +679,6 @@ export default function GoalsPage() {
   )
 }
 
-interface GoalBreakdown {
-  goal: Goal
-  contributions: {
-    all: Array<{
-      id: string
-      amount: number
-      contribution_date: string
-      description: string | null
-      source: string
-    }>
-    manual: Array<{ id: string; amount: number; contribution_date: string; description: string | null }>
-    oneTime: Array<{ id: string; amount: number; contribution_date: string; description: string | null }>
-    totalManual: number
-    totalOneTime: number
-  }
-  appliedIncomes: Array<{
-    id: string
-    amount: number
-    description: string
-    source: string
-    income_date: string
-  }>
-  summary: {
-    targetAmount: number
-    currentAmount: number
-    remaining: number
-    monthsRemaining: number
-    monthlyRequired: number
-    deadline: string
-    progressPercent: number
-  }
-  paymentSchedule: Array<{
-    date: string
-    month: string
-    expectedContribution: number
-    runningTotal: number
-    progressPercent: number
-  }>
-}
 
 interface GoalMomentum {
   goalId: string
