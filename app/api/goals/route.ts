@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getGoals, createGoal, updateGoal } from '@/lib/database'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await auth()
     
@@ -10,7 +10,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const goals = await getGoals(session.user.id)
+    // includeCancelled powers the restore-a-goal flow
+    const includeCancelled = request.nextUrl.searchParams.get('includeCancelled') === '1'
+    const goals = await getGoals(session.user.id, includeCancelled)
     return NextResponse.json(goals)
   } catch (error) {
     console.error('Error fetching goals:', error)

@@ -61,6 +61,25 @@ export default function ChatPage() {
     }
   }, [input])
 
+  // A goal card's "How do I reach this?" hands its brief through
+  // sessionStorage; it is consumed exactly once and sent as the opening
+  // message so the answer arrives grounded in the user's numbers.
+  const briefConsumed = useRef(false)
+  useEffect(() => {
+    if (briefConsumed.current) return
+    try {
+      const brief = sessionStorage.getItem('frem-goal-brief')
+      if (brief) {
+        sessionStorage.removeItem('frem-goal-brief')
+        briefConsumed.current = true
+        void sendMessage(brief)
+      }
+    } catch {
+      // Storage unavailable — the user simply starts the chat themselves
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const sendMessage = async (messageText?: string) => {
     const text = messageText || input.trim()
     if (!text || isLoading) return

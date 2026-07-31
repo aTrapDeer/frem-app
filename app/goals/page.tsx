@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -56,6 +57,10 @@ interface Goal {
   category: string
   status: string
   urgency_score: number // 1-5, higher = more urgent
+  entity?: 'personal' | 'business'
+  linked_account_id?: string | null
+  linked_account_kind?: 'bank' | 'investment' | null
+  allocation_percent?: number | null
 }
 
 interface GoalProjection {
@@ -101,6 +106,135 @@ export default function GoalsPage() {
   const [successMessage, setSuccessMessage] = useState("")
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [showProjectionInfo, setShowProjectionInfo] = useState(false)
+  const [momentum, setMomentum] = useState<Map<string, GoalMomentum>>(new Map())
+  const [accountOptions, setAccountOptions] = useState<AccountOption[]>([])
+  const [cancelledGoals, setCancelledGoals] = useState<Goal[]>([])
+  const [showCancelled, setShowCancelled] = useState(false)
+  const [briefLoading, setBriefLoading] = useState<string | null>(null)
+  const router = useRouter()
+
+  // Momentum/streaks (fails soft until the insights engine lands), account
+  // options for goal funding, and cancelled goals for the restore flow
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadExtras() {
+      try {
+        const [insightsRes, connectionsRes, investmentsRes, cancelledRes] = await Promise.all([
+          fetch('/api/goal-insights'),
+          fetch('/api/connections'),
+          fetch('/api/investments'),
+          fetch('/api/goals?includeCancelled=1'),
+        ])
+
+        if (insightsRes.ok) {
+          const data = await insightsRes.json()
+          if (!cancelled && Array.isArray(data?.momentum)) {
+            setMomentum(new Map(data.momentum.map((entry: GoalMomentum) => [entry.goalId, entry])))
+          }
+        }
+
+        const options: AccountOption[] = []
+        if (connectionsRes.ok) {
+          const data = await connectionsRes.json()
+          for (const connection of data.connections ?? []) {
+            for (const account of connection.accounts ?? []) {
+              options.push({
+                id: account.id,
+                kind: 'bank',
+                label: `${account.name}${account.mask ? ` ····${account.mask}` : ''}`,
+              })
+            }
+          }
+        }
+        if (investmentsRes.ok) {
+          const data = await investmentsRes.json()
+          for (const account of data.accounts ?? []) {
+            options.push({
+              id: account.id,
+              kind: 'investment',
+              label: account.label ?? account.accountType,
+            })
+          }
+        }
+        if (!cancelled) setAccountOptions(options)
+
+        if (cancelledRes.ok) {
+          const all = (await cancelledRes.json()) as Goal[]
+          if (!cancelled) setCancelledGoals(all.filter(goal => goal.status === 'cancelled'))
+        }
+      } catch {
+        // Extras only — the page works without any of them
+      }
+    }
+
+    loadExtras()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleLink = async (
+    goalId: string,
+    accountId: string | null,
+    kind: 'bank' | 'investment' | null,
+    percent: number | null
+  ) => {
+    try {
+      const response = await fetch('/api/goals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: goalId,
+          linked_account_id: accountId,
+          linked_account_kind: kind,
+          allocation_percent: percent,
+        }),
+      })
+      if (response.ok) {
+        setGoals(previous =>
+          previous.map(goal =>
+            goal.id === goalId
+              ? { ...goal, linked_account_id: accountId, linked_account_kind: kind, allocation_percent: percent }
+              : goal
+          )
+        )
+        const projectionsRes = await fetch('/api/projections')
+        if (projectionsRes.ok) setProjections(await projectionsRes.json())
+      }
+    } catch {
+      // Leave state untouched on failure
+    }
+  }
+
+  const handleHowTo = async (goalId: string) => {
+    setBriefLoading(goalId)
+    try {
+      const response = await fetch(`/api/goals/${goalId}/brief`)
+      if (!response.ok) return
+      const data = (await response.json()) as { brief?: string }
+      if (!data.brief) return
+      sessionStorage.setItem('frem-goal-brief', data.brief)
+      router.push('/chat')
+    } catch {
+      // Button simply stops loading
+    } finally {
+      setBriefLoading(null)
+    }
+  }
+
+  const handleRestore = async (goalId: string) => {
+    const response = await fetch('/api/goals', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: goalId, status: 'active' }),
+    }).catch(() => null)
+    if (response?.ok) {
+      const restored = cancelledGoals.find(goal => goal.id === goalId)
+      setCancelledGoals(previous => previous.filter(goal => goal.id !== goalId))
+      if (restored) setGoals(previous => [...previous, { ...restored, status: 'active' }])
+    }
+  }
 
   const {
     register,
@@ -453,17 +587,57 @@ export default function GoalsPage() {
                 </div>
               ) : (
                 goals.map((goal, index) => (
-                  <GoalCard 
-                    key={goal.id} 
-                    goal={goal} 
+                  <GoalCard
+                    key={goal.id}
+                    goal={goal}
                     projection={getProjection(goal.id)}
+                    momentum={momentum.get(goal.id)}
+                    accountOptions={accountOptions}
                     index={index}
                     onEdit={setEditingGoal}
                     onDelete={handleDeleteGoal}
                     onComplete={handleCompleteGoal}
-                    onUrgencyChange={handleQuickUrgencyUpdate}
+                    onLink={handleLink}
+                    onHowTo={handleHowTo}
+                    briefLoading={briefLoading === goal.id}
                   />
                 ))
+              )}
+
+              {cancelledGoals.length > 0 && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelled(previous => !previous)}
+                    className="text-sm text-slate-400 hover:text-slate-600"
+                  >
+                    {showCancelled ? 'Hide' : 'Show'} recently cancelled ({cancelledGoals.length})
+                  </button>
+                  {showCancelled && (
+                    <div className="mt-3 space-y-2">
+                      {cancelledGoals.map(goal => (
+                        <div
+                          key={goal.id}
+                          className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50"
+                        >
+                          <span className="text-sm text-slate-600 truncate">
+                            {goal.title}
+                            <span className="text-slate-400 tabular-nums">
+                              {' '}· ${goal.target_amount.toLocaleString()}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRestore(goal.id)}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium shrink-0"
+                          >
+                            Restore
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -569,437 +743,289 @@ interface GoalBreakdown {
   }>
 }
 
+interface GoalMomentum {
+  goalId: string
+  monthlyRequired: number
+  monthlyAllocated: number
+  monthsAheadOrBehind: number
+  fundingStreak: number
+  fundedMonths: boolean[]
+}
+
+interface AccountOption {
+  id: string
+  kind: 'bank' | 'investment'
+  label: string
+}
+
 interface GoalCardProps {
   goal: Goal
   projection?: GoalProjection
+  momentum?: GoalMomentum
+  accountOptions: AccountOption[]
   index: number
   onEdit: (goal: Goal) => void
   onDelete: (goalId: string) => void
   onComplete: (goalId: string) => void
-  onUrgencyChange: (goalId: string, newScore: number) => void
+  onLink: (goalId: string, accountId: string | null, kind: 'bank' | 'investment' | null, percent: number | null) => void
+  onHowTo: (goalId: string) => void
+  briefLoading: boolean
 }
 
-function GoalCard({ goal, projection, index, onEdit, onDelete, onComplete, onUrgencyChange }: GoalCardProps) {
-  const [showBreakdown, setShowBreakdown] = useState(false)
-  const [breakdown, setBreakdown] = useState<GoalBreakdown | null>(null)
-  const [loadingBreakdown, setLoadingBreakdown] = useState(false)
+/** Category is the card's visual identity — edge, fill, and chip agree. */
+const CATEGORY_STYLES: Record<string, { edge: string; fill: string; chip: string; icon: string }> = {
+  emergency: { edge: 'border-l-emerald-500', fill: 'bg-emerald-500', chip: 'text-emerald-700 bg-emerald-50', icon: '🛟' },
+  house: { edge: 'border-l-blue-500', fill: 'bg-blue-500', chip: 'text-blue-700 bg-blue-50', icon: '🏠' },
+  investment: { edge: 'border-l-violet-500', fill: 'bg-violet-500', chip: 'text-violet-700 bg-violet-50', icon: '🌴' },
+  debt: { edge: 'border-l-amber-500', fill: 'bg-amber-500', chip: 'text-amber-700 bg-amber-50', icon: '💳' },
+  car: { edge: 'border-l-slate-500', fill: 'bg-slate-600', chip: 'text-slate-700 bg-slate-100', icon: '🚗' },
+  vacation: { edge: 'border-l-cyan-500', fill: 'bg-cyan-500', chip: 'text-cyan-700 bg-cyan-50', icon: '✈️' },
+  other: { edge: 'border-l-slate-400', fill: 'bg-slate-500', chip: 'text-slate-600 bg-slate-100', icon: '🎯' },
+}
 
-  const manualProgress = goal.target_amount > 0 ? (goal.current_amount / goal.target_amount) * 100 : 0
-  const projectedProgress = projection?.progressPercentage || manualProgress
-  const urgency = goal.urgency_score || 3
-  
-  // Get urgency level info
-  const urgencyInfo = urgencyLevels.find(u => u.value === urgency) || urgencyLevels[2]
+const STATUS_STYLES: Record<string, string> = {
+  on_track: 'text-emerald-700 bg-emerald-50',
+  ahead: 'text-emerald-700 bg-emerald-50',
+  behind: 'text-amber-700 bg-amber-50',
+  at_risk: 'text-red-700 bg-red-50',
+  completed: 'text-emerald-700 bg-emerald-100',
+}
 
-  const fetchBreakdown = async () => {
-    if (breakdown) {
-      setShowBreakdown(true)
-      return
-    }
-    
-    setLoadingBreakdown(true)
-    try {
-      const response = await fetch(`/api/goals/${goal.id}/breakdown`)
-      if (response.ok) {
-        const data = await response.json()
-        setBreakdown(data)
-        setShowBreakdown(true)
-      }
-    } catch (error) {
-      console.error('Error fetching breakdown:', error)
-    } finally {
-      setLoadingBreakdown(false)
-    }
-  }
-  
-  // Status badge styling
-  const getStatusBadge = () => {
-    if (!projection) return null
-    
-    const badges = {
-      completed: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: 'Completed!' },
-      ahead: { bg: 'bg-blue-100', text: 'text-blue-700', icon: TrendingUp, label: `${projection.daysAheadOrBehind}d ahead` },
-      on_track: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: 'On Track' },
-      behind: { bg: 'bg-amber-100', text: 'text-amber-700', icon: Clock, label: `${Math.abs(projection.daysAheadOrBehind)}d behind` },
-      at_risk: { bg: 'bg-red-100', text: 'text-red-700', icon: AlertTriangle, label: 'At Risk' }
-    }
-    
-    const badge = badges[projection.status]
-    const Icon = badge.icon
-    
-    return (
-      <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${badge.bg} ${badge.text}`}>
-        <Icon className="h-3 w-3" />
-        {badge.label}
-      </span>
-    )
-  }
+function momentumLine(projection?: GoalProjection, momentum?: GoalMomentum): string | null {
+  const months = momentum?.monthsAheadOrBehind ?? (projection ? Math.round(projection.daysAheadOrBehind / 30) : null)
+  if (months === null) return null
+  if (months > 1) return `${months} months ahead of schedule`
+  if (months === 1) return 'a month ahead of schedule'
+  if (months === 0) return 'right on schedule'
+  if (months === -1) return 'a month behind — recoverable'
+  return `${Math.abs(months)} months behind schedule`
+}
+
+function GoalCard({
+  goal,
+  projection,
+  momentum,
+  accountOptions,
+  index,
+  onEdit,
+  onDelete,
+  onComplete,
+  onLink,
+  onHowTo,
+  briefLoading,
+}: GoalCardProps) {
+  const [linking, setLinking] = useState(false)
+  const [pickAccount, setPickAccount] = useState('')
+  const [pickPercent, setPickPercent] = useState('80')
+
+  const style = CATEGORY_STYLES[goal.category] ?? CATEGORY_STYLES.other
+  const current = projection?.currentAmount ?? goal.current_amount
+  const progress = goal.target_amount > 0 ? Math.min(100, (current / goal.target_amount) * 100) : 0
+  const status = projection?.status ?? 'on_track'
+  const line = momentumLine(projection, momentum)
+  const linked = goal.linked_account_id
+    ? accountOptions.find(option => option.id === goal.linked_account_id)
+    : null
+
+  const completionLabel = projection?.projectedCompletionDate
+    ? new Date(projection.projectedCompletionDate + 'T00:00:00').toLocaleDateString('en-US', {
+        month: 'short',
+        year: 'numeric',
+      })
+    : null
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.6, delay: index * 0.1 }}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: index * 0.06 }}
     >
-      <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 group">
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-bold text-slate-900">{goal.title}</h3>
-                    {getStatusBadge()}
-                  </div>
-                  <p className="text-sm text-slate-600 capitalize">{goal.category}</p>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={fetchBreakdown}
-                    disabled={loadingBreakdown}
-                    className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                    title="View breakdown & payment schedule"
-                  >
-                    {loadingBreakdown ? (
-                      <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Info className="h-4 w-4 text-blue-500" />
-                    )}
-                  </button>
-                  <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => onEdit(goal)}
-                      className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
-                      title="Edit goal"
-                    >
-                      <Edit className="h-4 w-4 text-slate-600" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Mark "${goal.title}" as complete? Its share of your monthly surplus will move to your other goals.`)) {
-                          onComplete(goal.id)
-                        }
-                      }}
-                      className="p-2 rounded-lg hover:bg-emerald-50 transition-colors"
-                      title="Mark complete"
-                    >
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(goal.id)}
-                      className="p-2 rounded-lg hover:bg-red-50 transition-colors"
-                      title="Delete goal"
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Amount display - show projected vs manual */}
-              <div className="text-right mt-2">
-                {projection ? (
-                  <>
-                    <p className="text-2xl font-bold font-numbers text-slate-900">
-                      ${projection.totalProjectedProgress.toLocaleString()}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      of ${goal.target_amount.toLocaleString()}
-                      {goal.current_amount > 0 && (
-                        <span className="text-xs text-slate-400 ml-1">
-                          (${goal.current_amount.toLocaleString()} saved + ${projection.projectedAmount.toLocaleString()} projected)
-                        </span>
-                      )}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold font-numbers text-slate-900">${goal.current_amount.toLocaleString()}</p>
-                    <p className="text-sm text-slate-600">of ${goal.target_amount.toLocaleString()}</p>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="space-y-2">
-            <div className="relative">
-              {/* Background bar */}
-              <Progress value={projectedProgress} className="h-3" />
-              {/* Manual progress indicator (if different from projected) */}
-              {projection && goal.current_amount > 0 && manualProgress < projectedProgress && (
-                <div 
-                  className="absolute top-0 left-0 h-3 bg-green-600 rounded-full transition-all"
-                  style={{ width: `${manualProgress}%` }}
-                />
+      <Card className={`bg-white border border-slate-200 border-l-4 ${style.edge} shadow-sm`}>
+        <CardContent className="p-5">
+          {/* Title row */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-lg leading-none">{style.icon}</span>
+              <h3 className="font-semibold text-slate-900 truncate">{goal.title}</h3>
+              {goal.entity === 'business' && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded shrink-0">
+                  Biz
+                </span>
               )}
             </div>
-            
-            <div className="flex justify-between text-sm text-slate-600">
-              <span>{Math.round(projectedProgress)}% {projection ? 'projected' : 'complete'}</span>
-              <span>Due {new Date(goal.deadline).toLocaleDateString()}</span>
-            </div>
-          </div>
-          
-          {/* Urgency Control */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-slate-500">Priority</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full border ${urgencyInfo.color}`}>
-                {urgencyInfo.label}
-              </span>
-            </div>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((level) => {
-                const levelInfo = urgencyLevels.find(u => u.value === level)!
-                const isActive = level <= urgency
-                return (
-                  <button
-                    key={level}
-                    onClick={() => onUrgencyChange(goal.id, level)}
-                    className={`flex-1 h-2 rounded-full transition-all ${
-                      isActive 
-                        ? level <= 2 ? 'bg-slate-400' 
-                          : level === 3 ? 'bg-amber-400'
-                          : level === 4 ? 'bg-orange-400'
-                          : 'bg-red-500'
-                        : 'bg-slate-200 hover:bg-slate-300'
-                    }`}
-                    title={`${levelInfo.label}: ${levelInfo.description}`}
-                  />
-                )
-              })}
-            </div>
-            <p className="text-xs text-slate-400 mt-1 text-center">{urgencyInfo.description}</p>
+            <span
+              className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                STATUS_STYLES[status] ?? STATUS_STYLES.on_track
+              }`}
+            >
+              {status.replace('_', ' ')}
+            </span>
           </div>
 
-          {/* Projection details */}
-          {projection && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-slate-400" />
-                  <div>
-                    <p className="text-slate-500 text-xs">Est. Completion</p>
-                    <p className="font-medium text-slate-900">
-                      {new Date(projection.projectedCompletionDate).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric',
-                        year: projection.daysUntilProjectedCompletion > 365 ? 'numeric' : undefined
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-slate-400" />
-                  <div>
-                    <p className="text-slate-500 text-xs">Monthly Allocation</p>
-                    <p className="font-medium text-green-600">+${projection.monthlyAllocation.toLocaleString()}/mo</p>
-                  </div>
-                </div>
-              </div>
+          {/* Progress */}
+          <div className="mt-4">
+            <div className="flex justify-between text-sm tabular-nums mb-1.5">
+              <span className="font-semibold text-slate-900">
+                ${Math.round(current).toLocaleString()}
+              </span>
+              <span className="text-slate-500">${goal.target_amount.toLocaleString()}</span>
             </div>
-          )}
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+                className={`h-full rounded-full ${style.fill}`}
+              />
+            </div>
+          </div>
+
+          {/* Funding row */}
+          <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500 flex-wrap">
+            {linked ? (
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="truncate">
+                  ⚭ {goal.allocation_percent ?? 100}% of {linked.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onLink(goal.id, null, null, null)}
+                  className="text-slate-400 hover:text-red-500"
+                  title="Unlink account"
+                >
+                  ✕
+                </button>
+              </span>
+            ) : linking ? (
+              <span className="flex items-center gap-1.5 flex-wrap">
+                <select
+                  value={pickAccount}
+                  onChange={event => setPickAccount(event.target.value)}
+                  className="h-7 rounded border border-slate-200 bg-white px-1.5 text-xs max-w-[180px]"
+                >
+                  <option value="" disabled>
+                    Pick an account…
+                  </option>
+                  {accountOptions.map(option => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  inputMode="numeric"
+                  value={pickPercent}
+                  onChange={event => setPickPercent(event.target.value)}
+                  className="h-7 w-12 rounded border border-slate-200 px-1.5 text-xs text-center"
+                />
+                <span>%</span>
+                <button
+                  type="button"
+                  disabled={!pickAccount}
+                  onClick={() => {
+                    const option = accountOptions.find(item => item.id === pickAccount)
+                    if (!option) return
+                    const percent = Math.min(Math.max(Number(pickPercent) || 100, 1), 100)
+                    onLink(goal.id, option.id, option.kind, percent)
+                    setLinking(false)
+                  }}
+                  className="text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                >
+                  Link
+                </button>
+                <button type="button" onClick={() => setLinking(false)} className="text-slate-400">
+                  ✕
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setLinking(true)}
+                className="text-blue-600 hover:text-blue-700"
+              >
+                ⚭ Link an account to fund this
+              </button>
+            )}
+
+            {momentum && momentum.fundedMonths.length > 0 && (
+              <span
+                className="flex items-center gap-0.5"
+                title={`Funded ${momentum.fundingStreak} month${momentum.fundingStreak === 1 ? '' : 's'} running`}
+              >
+                {momentum.fundedMonths.map((funded, monthIndex) => (
+                  <span
+                    key={monthIndex}
+                    className={`w-2 h-2 rounded-sm ${funded ? style.fill : 'bg-slate-200'}`}
+                  />
+                ))}
+              </span>
+            )}
+          </div>
+
+          {/* The two numbers that matter + momentum */}
+          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-3 text-sm flex-wrap">
+            <span className="text-slate-600 tabular-nums">
+              {projection && projection.monthlyAllocation > 0 ? (
+                <>
+                  <span className="font-medium text-slate-900">
+                    ${Math.round(projection.monthlyAllocation).toLocaleString()}/mo
+                  </span>{' '}
+                  flowing in{completionLabel ? ` · done ≈ ${completionLabel}` : ''}
+                </>
+              ) : (
+                <span className="text-amber-700">Nothing flowing in yet</span>
+              )}
+            </span>
+            {line && (
+              <span
+                className={`text-xs ${
+                  line.includes('behind') ? 'text-amber-700' : 'text-emerald-700'
+                }`}
+              >
+                {line}
+              </span>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => onHowTo(goal.id)}
+              disabled={briefLoading}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1"
+            >
+              {briefLoading ? 'Preparing…' : 'How do I reach this?'}
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onEdit(goal)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                title="Edit goal"
+              >
+                <Edit className="h-3.5 w-3.5 text-slate-500" />
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm(`Mark "${goal.title}" as complete?`)) onComplete(goal.id)
+                }}
+                className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors"
+                title="Mark complete"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              </button>
+              <button
+                onClick={() => onDelete(goal.id)}
+                className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                title="Delete goal"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-red-500" />
+              </button>
+            </div>
+          </div>
         </CardContent>
       </Card>
-
-      {/* Breakdown Modal */}
-      <AnimatePresence>
-        {showBreakdown && breakdown && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowBreakdown(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 32 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 32 }}
-              className="w-full max-w-lg bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <Info className="h-5 w-5 text-blue-500" />
-                    Goal Breakdown
-                  </h2>
-                  <button
-                    onClick={() => setShowBreakdown(false)}
-                    className="p-2 rounded-lg hover:bg-white/50 transition-colors"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <h3 className="text-lg text-slate-700">{breakdown.goal.title}</h3>
-              </div>
-
-              <div className="overflow-y-auto max-h-[calc(90vh-200px)]">
-                {/* Progress Summary */}
-                <div className="p-6 border-b border-slate-100">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Progress Summary</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-600">Target Amount</span>
-                      <span className="font-bold text-slate-900">${breakdown.summary.targetAmount.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-600">Current Progress</span>
-                      <span className="font-bold text-green-600">${breakdown.summary.currentAmount.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-600">Remaining</span>
-                      <span className="font-bold text-amber-600">${breakdown.summary.remaining.toLocaleString()}</span>
-                    </div>
-                    <Progress value={breakdown.summary.progressPercent} className="h-2" />
-                    <p className="text-center text-sm text-slate-500">
-                      {breakdown.summary.progressPercent}% complete • {breakdown.summary.monthsRemaining} months to deadline
-                    </p>
-                  </div>
-                </div>
-
-                {/* Contribution Breakdown */}
-                <div className="p-6 border-b border-slate-100">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Where Your Progress Comes From</h4>
-                  <div className="space-y-2">
-                    {breakdown.contributions.totalManual > 0 && (
-                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-                            <Target className="h-4 w-4 text-white" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-900">Manual Contributions</p>
-                            <p className="text-xs text-slate-500">{breakdown.contributions.manual.length} contribution(s)</p>
-                          </div>
-                        </div>
-                        <span className="font-bold text-green-600">+${breakdown.contributions.totalManual.toLocaleString()}</span>
-                      </div>
-                    )}
-                    
-                    {breakdown.contributions.totalOneTime > 0 && (
-                      <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
-                            <TrendingUp className="h-4 w-4 text-white" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-900">One-Time Income Applied</p>
-                            <p className="text-xs text-slate-500">{breakdown.appliedIncomes.length} income(s) applied</p>
-                          </div>
-                        </div>
-                        <span className="font-bold text-amber-600">+${breakdown.contributions.totalOneTime.toLocaleString()}</span>
-                      </div>
-                    )}
-
-                    {projection && (
-                      <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                            <Calendar className="h-4 w-4 text-white" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-900">Projected Allocation</p>
-                            <p className="text-xs text-slate-500">From monthly surplus</p>
-                          </div>
-                        </div>
-                        <span className="font-bold text-blue-600">+${projection.monthlyAllocation.toLocaleString()}/mo</span>
-                      </div>
-                    )}
-
-                    {breakdown.summary.currentAmount === 0 && !projection && (
-                      <div className="text-center py-4 text-slate-500">
-                        <p>No contributions yet. Add income or set up automatic allocations.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Applied One-Time Incomes Detail */}
-                {breakdown.appliedIncomes.length > 0 && (
-                  <div className="p-6 border-b border-slate-100">
-                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Applied One-Time Income Details</h4>
-                    <div className="space-y-2">
-                      {breakdown.appliedIncomes.map((income) => (
-                        <div key={income.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
-                          <div>
-                            <p className="font-medium text-slate-900">{income.description}</p>
-                            <p className="text-xs text-slate-500">
-                              {income.source} • {new Date(income.income_date).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <span className="font-bold text-green-600">+${income.amount.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Expected Payment Schedule */}
-                <div className="p-6">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Expected Payment Schedule
-                  </h4>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Based on your monthly allocation of ${breakdown.summary.monthlyRequired.toLocaleString()}
-                  </p>
-                  <div className="space-y-2">
-                    {breakdown.paymentSchedule.map((payment, idx) => (
-                      <div 
-                        key={`${payment.date}-${idx}`} 
-                        className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100"
-                      >
-                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-slate-900">{payment.month}</span>
-                            <span className="text-green-600 font-medium">+${payment.expectedContribution.toLocaleString()}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-slate-200 rounded-full h-1.5">
-                              <div 
-                                className="h-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all"
-                                style={{ width: `${payment.progressPercent}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-slate-500 w-20 text-right">
-                              ${payment.runningTotal.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {breakdown.summary.monthsRemaining > 6 && (
-                      <p className="text-center text-sm text-slate-400 pt-2">
-                        + {breakdown.summary.monthsRemaining - 6} more months until deadline
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="p-4 border-t border-slate-200 bg-slate-50">
-                <p className="text-xs text-center text-slate-500">
-                  Deadline: {new Date(breakdown.summary.deadline).toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </p>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   )
 }
