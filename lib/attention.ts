@@ -1,5 +1,6 @@
 import { getFinancialAccounts, getGoals, getIncomeSources } from '@/lib/database'
 import { describeAge, findLapsedIncomeSources, freshnessOf, incomeEndsOn } from '@/lib/freshness'
+import { getGoalMomentum } from './goal-insights'
 
 /**
  * Things the app noticed that need a human decision.
@@ -14,7 +15,7 @@ export type AttentionSeverity = 'info' | 'warning'
 
 export type AttentionItem = {
   id: string
-  kind: 'lapsed_income' | 'stale_account' | 'stale_goal'
+  kind: 'lapsed_income' | 'stale_account' | 'stale_goal' | 'goal_funded' | 'goal_unfunded'
   severity: AttentionSeverity
   title: string
   detail: string
@@ -26,10 +27,11 @@ export type AttentionItem = {
 const STALE_ACCOUNT_DAYS = 45
 
 export async function getAttentionItems(userId: string, asOf: Date = new Date()): Promise<AttentionItem[]> {
-  const [incomeSources, accounts, goals] = await Promise.all([
+  const [incomeSources, accounts, goals, goalMomentum] = await Promise.all([
     getIncomeSources(userId).catch(() => []),
     getFinancialAccounts(userId).catch(() => []),
     getGoals(userId).catch(() => []),
+    getGoalMomentum(userId, asOf).catch(() => []),
   ])
 
   const items: AttentionItem[] = []
@@ -78,6 +80,42 @@ export async function getAttentionItems(userId: string, asOf: Date = new Date())
       href: '/goals',
     })
   }
+
+  const lastCompleteMonth = new Date(asOf.getFullYear(), asOf.getMonth() - 1, 1)
+  const monthKey = `${lastCompleteMonth.getFullYear()}-${String(lastCompleteMonth.getMonth() + 1).padStart(2, '0')}`
+  const monthName = lastCompleteMonth.toLocaleString('en-US', { month: 'long' })
+  const goalById = new Map(goals.map(goal => [goal.id, goal]))
+  const money = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+
+  const goalItems: AttentionItem[] = goalMomentum
+    .filter(momentum => momentum.monthlyAllocated > 0)
+    .map((momentum): AttentionItem => {
+      const goal = goalById.get(momentum.goalId)
+      const funded = momentum.fundedMonths.at(-1) ?? false
+      const amount = money.format(momentum.monthlyAllocated)
+
+      return {
+        id: `goal-${funded ? 'funded' : 'unfunded'}-${momentum.goalId}-${monthKey}`,
+        kind: funded ? 'goal_funded' : 'goal_unfunded',
+        severity: funded ? 'info' : 'warning',
+        title: funded
+          ? `${goal?.title ?? 'Goal'} got its ${amount} last month`
+          : `${goal?.title ?? 'Goal'} missed its ${amount} in ${monthName}`,
+        detail: funded
+          ? `Measured ${goal?.entity ?? 'personal'} surplus in ${monthName} was enough to cover this goal's current monthly allocation.`
+          : `Measured ${goal?.entity ?? 'personal'} surplus in ${monthName} was not enough to cover this goal's current monthly allocation.`,
+        href: '/goals',
+      }
+    })
+    .sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'warning' ? -1 : 1))
+    .slice(0, 4)
+
+  items.push(...goalItems)
 
   // Warnings first — those change the numbers, info items only reduce confidence
   return items.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'warning' ? -1 : 1))
