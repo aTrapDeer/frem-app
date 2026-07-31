@@ -470,33 +470,22 @@ export default function SummaryPage() {
                     </div>
                   </div>
                   
-                  {/* Month quick stats - responsive grid */}
+                  {/* Month quick stats — one quiet row, values carry the weight */}
                   {monthlyProjections[selectedMonthIndex] && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-indigo-100">
-                      <div className="text-center">
-                        <p className="text-xl sm:text-2xl font-bold text-indigo-600">
-                          {monthlyProjections[selectedMonthIndex].summary.activeGoalsCount}
-                        </p>
-                        <p className="text-xs text-slate-600">Active</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xl sm:text-2xl font-bold text-green-600">
-                          {monthlyProjections[selectedMonthIndex].summary.completedGoalsCount}
-                        </p>
-                        <p className="text-xs text-slate-600">Done</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xl sm:text-2xl font-bold text-amber-600">
-                          {monthlyProjections[selectedMonthIndex].summary.upcomingGoalsCount}
-                        </p>
-                        <p className="text-xs text-slate-600">Upcoming</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xl sm:text-2xl font-bold text-slate-900">
-                          {Math.round(monthlyProjections[selectedMonthIndex].summary.totalGoalProgress)}%
-                        </p>
-                        <p className="text-xs text-slate-600">Progress</p>
-                      </div>
+                    <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-indigo-100">
+                      {[
+                        { value: monthlyProjections[selectedMonthIndex].summary.activeGoalsCount, label: 'active goals', accent: true },
+                        { value: monthlyProjections[selectedMonthIndex].summary.completedGoalsCount, label: 'done' },
+                        { value: monthlyProjections[selectedMonthIndex].summary.upcomingGoalsCount, label: 'upcoming' },
+                        { value: `${Math.round(monthlyProjections[selectedMonthIndex].summary.totalGoalProgress)}%`, label: 'projected progress' },
+                      ].map(stat => (
+                        <span key={stat.label} className="flex items-baseline gap-1.5">
+                          <span className={`text-xl sm:text-2xl font-bold tabular-nums ${stat.accent ? 'text-indigo-600' : 'text-slate-900'}`}>
+                            {stat.value}
+                          </span>
+                          <span className="text-xs text-slate-500">{stat.label}</span>
+                        </span>
+                      ))}
                     </div>
                   )}
                 </CardContent>
@@ -515,7 +504,7 @@ export default function SummaryPage() {
               <Card className="glass-card card-lift">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-slate-600">
-                    Savings Rate {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
+                    Savings Rate <span className="text-xs font-normal text-slate-400">· personal</span> {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
                   </CardTitle>
                   <TrendingUp className="h-4 w-4 text-slate-600" />
                 </CardHeader>
@@ -570,7 +559,7 @@ export default function SummaryPage() {
               <Card className="glass-card card-lift">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-slate-600">
-                    Monthly Surplus {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
+                    Monthly Surplus <span className="text-xs font-normal text-slate-400">· personal</span> {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
                   </CardTitle>
                   <DollarSign className={`h-4 w-4 ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`} />
                 </CardHeader>
@@ -608,7 +597,7 @@ export default function SummaryPage() {
               >
                 <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-slate-600">Monthly Income</CardTitle>
+                    <CardTitle className="text-sm font-medium text-slate-600">Monthly Income <span className="text-xs font-normal text-slate-400">· personal</span></CardTitle>
                     <DollarSign className="h-4 w-4 text-green-600" />
                   </CardHeader>
                   <CardContent>
@@ -657,7 +646,7 @@ export default function SummaryPage() {
               >
                 <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-slate-600">{personalOverview ? 'Monthly Surplus' : `Monthly ${kpis.surplus >= 0 ? 'Surplus' : 'Deficit'}`}</CardTitle>
+                    <CardTitle className="text-sm font-medium text-slate-600">{personalOverview ? <>Monthly Surplus <span className="text-xs font-normal text-slate-400">· personal</span></> : `Monthly ${kpis.surplus >= 0 ? 'Surplus' : 'Deficit'}`}</CardTitle>
                     {kpis.surplus >= 0 ? <TrendingUp className="h-4 w-4 text-green-600" /> : <TrendingDown className="h-4 w-4 text-red-600" />}
                   </CardHeader>
                   <CardContent>
@@ -735,82 +724,125 @@ export default function SummaryPage() {
             >
               <Card className="bg-white border border-slate-200 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-4">Smart Financial Analysis</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-5">Where you stand</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
+                    {/* Measured reality, per ledger */}
                     <div>
-                      <h4 className="font-medium text-slate-800 mb-3">Monthly Breakdown</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">Goals ({targetData.activeGoalsCount}):</span>
-                          <span className="font-medium text-blue-600">${targetData.monthlyGoalObligations.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">Recurring Expenses ({targetData.recurringExpensesCount}):</span>
-                          <span className="font-medium text-red-600">${targetData.monthlyRecurringTotal.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between pt-2 border-t border-slate-200">
-                          <span className="font-semibold text-slate-800">Total Monthly Need:</span>
-                          <span className="font-semibold text-slate-800">${targetData.totalMonthlyObligations.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-slate-800 mb-3">
-                        Income Sources
-                        {incomeSummary?.hasCommissionIncome && (
-                          <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                            Variable Income
-                          </span>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
+                        Personal
+                        {personalOverview?.surplus.basis === 'measured' && (
+                          <BasisChip basis="measured" monthsOfData={personalOverview.surplus.monthsOfData} />
                         )}
                       </h4>
-                      <div className="space-y-2 text-sm">
-                        {incomeSummary?.hasCommissionIncome ? (
-                          <>
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-600">Conservative:</span>
-                              <span className="font-medium text-red-500">${incomeSummary.totalMonthlyLow.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-600">Safe Average:</span>
-                              <span className="font-medium text-green-600">${incomeSummary.totalMonthlyMid.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-600">Optimistic:</span>
-                              <span className="font-medium text-blue-600">${incomeSummary.totalMonthlyHigh.toLocaleString()}</span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Primary Income:</span>
-                            <span className="font-medium text-green-600">${(targetData.estimatedMonthlyIncome - targetData.monthlyProjectIncome).toLocaleString()}</span>
-                          </div>
-                        )}
+                      <div className="space-y-2 text-sm tabular-nums">
                         <div className="flex justify-between">
-                          <span className="text-slate-600">Side Projects:</span>
-                          <span className="font-medium text-blue-600">${targetData.monthlyProjectIncome.toLocaleString()}</span>
+                          <span className="text-slate-600">Income</span>
+                          <span className="font-medium text-slate-900">
+                            ${Math.round(personalOverview?.income.measured ?? personalOverview?.income.plan ?? 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Spending</span>
+                          <span className="font-medium text-slate-900">
+                            ${Math.round(personalOverview?.expenses.measured ?? personalOverview?.expenses.plan ?? 0).toLocaleString()}
+                          </span>
                         </div>
                         <div className="flex justify-between pt-2 border-t border-slate-200">
-                          <span className="font-semibold text-slate-800">Total Monthly Income:</span>
-                          <span className="font-semibold text-slate-800">${targetData.estimatedMonthlyIncome.toLocaleString()}</span>
+                          <span className="font-semibold text-slate-800">Surplus</span>
+                          <span className={`font-semibold ${(personalOverview?.surplus.value ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                            {(personalOverview?.surplus.value ?? 0) < 0 ? '−' : '+'}$
+                            {Math.abs(Math.round(personalOverview?.surplus.value ?? 0)).toLocaleString()}/mo
+                          </span>
                         </div>
-                        {incomeSummary?.hasCommissionIncome && (
-                          <p className="text-xs text-slate-500 pt-2">
-                            💡 Goals calculated using &quot;Safe Average&quot; for reliability
-                          </p>
-                        )}
+                      </div>
+
+                      {overview?.entities.business && (
+                        <div className="mt-5">
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-purple-600 mb-3 flex items-center gap-2">
+                            Business
+                            {overview.entities.business.surplus.basis === 'measured' && (
+                              <BasisChip basis="measured" monthsOfData={overview.entities.business.surplus.monthsOfData} />
+                            )}
+                          </h4>
+                          <div className="space-y-2 text-sm tabular-nums">
+                            <div className="flex justify-between">
+                              <span className="text-slate-600">Income</span>
+                              <span className="font-medium text-slate-900">
+                                ${Math.round(overview.entities.business.income.measured ?? 0).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600">Spending</span>
+                              <span className="font-medium text-slate-900">
+                                ${Math.round(overview.entities.business.expenses.measured ?? 0).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between pt-2 border-t border-slate-200">
+                              <span className="font-semibold text-slate-800">Surplus</span>
+                              <span className={`font-semibold ${overview.entities.business.surplus.value < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                                {overview.entities.business.surplus.value < 0 ? '−' : '+'}$
+                                {Math.abs(Math.round(overview.entities.business.surplus.value)).toLocaleString()}/mo
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* What the plan asks for */}
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
+                        The plan asks
+                        <BasisChip basis="plan" monthsOfData={0} />
+                      </h4>
+                      <div className="space-y-2 text-sm tabular-nums">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Goals ({targetData.activeGoalsCount})</span>
+                          <span className="font-medium text-slate-900">${targetData.monthlyGoalObligations.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Monthly bills ({targetData.recurringExpensesCount})</span>
+                          <span className="font-medium text-slate-900">${targetData.monthlyRecurringTotal.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between pt-2 border-t border-slate-200">
+                          <span className="font-semibold text-slate-800">Total monthly need</span>
+                          <span className="font-semibold text-slate-800">${targetData.totalMonthlyObligations.toLocaleString()}</span>
+                        </div>
+                        <p className="text-xs text-slate-400 pt-1 leading-relaxed">
+                          Bills come from your Plan (wizard or Money → Plan). Goal amounts are
+                          each goal&apos;s required monthly pace.
+                        </p>
                       </div>
                     </div>
                   </div>
-                  {targetData.monthlySurplusDeficit !== 0 && (
-                    <div className="mt-4 p-4 rounded-lg bg-slate-50 border">
-                      <p className={`text-sm font-medium ${targetData.monthlySurplusDeficit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {targetData.monthlySurplusDeficit >= 0 ? '💚 Financial Health: Excellent' : '⚠️ Financial Health: Needs Attention'} 
+
+                  {/* The verdict, from measured money — never from the plan */}
+                  {personalOverview?.surplus.basis === 'measured' && (
+                    <div
+                      className={`mt-6 p-4 rounded-lg border-l-4 ${
+                        personalOverview.surplus.value >= targetData.totalMonthlyObligations
+                          ? 'border-l-emerald-500 bg-emerald-50/50'
+                          : personalOverview.surplus.value >= 0
+                            ? 'border-l-amber-500 bg-amber-50/50'
+                            : 'border-l-red-500 bg-red-50/50'
+                      }`}
+                    >
+                      <p className="text-sm font-medium text-slate-900">
+                        {personalOverview.surplus.value >= targetData.totalMonthlyObligations
+                          ? 'Your measured surplus covers the whole plan.'
+                          : personalOverview.surplus.value >= 0
+                            ? `Measured surplus is $${Math.round(personalOverview.surplus.value).toLocaleString()}/mo — the plan asks for $${targetData.totalMonthlyObligations.toLocaleString()}.`
+                            : 'You are spending more than you earn on the personal side.'}
                       </p>
                       <p className="text-sm text-slate-600 mt-1">
-                        {targetData.monthlySurplusDeficit >= 0 
-                          ? `You have $${targetData.monthlySurplusDeficit.toLocaleString()}/month surplus. Consider increasing your goals or starting new investments.`
-                          : `You need an additional $${Math.abs(targetData.monthlySurplusDeficit).toLocaleString()}/month income to comfortably meet your current financial obligations.`
-                        }
+                        {personalOverview.surplus.value >= targetData.totalMonthlyObligations
+                          ? 'Room to raise a goal, shorten a deadline, or build the cushion.'
+                          : personalOverview.surplus.value >= 0
+                            ? 'Close the gap by trimming the plan, extending deadlines, or raising owner pay — the goals page can walk through the levers.'
+                            : overview?.entities.business
+                              ? 'Business surplus exists but only reaches you through owner pay — review your pay level, or trim personal spending.'
+                              : 'Start with the biggest category gap on the Money page.'}
                       </p>
                     </div>
                   )}

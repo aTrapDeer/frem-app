@@ -34,6 +34,8 @@ body {
   font-family: var(--font-inter), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Kill the grey mobile tap-highlight box (shows behind carousel stats on touch) */
+  -webkit-tap-highlight-color: transparent;
 }
 
 h1,
