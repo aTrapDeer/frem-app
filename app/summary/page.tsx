@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress"
 import { useInView } from "framer-motion"
 import { DollarSign, Target, MapPin, X, CreditCard, TrendingUp, TrendingDown, CheckCircle2, Clock, AlertTriangle, ChevronLeft, ChevronRight, Calendar, Play, Rocket } from "lucide-react"
 import { Navbar } from "@/components/navbar"
+import { PageHeader } from "@/components/page-header"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/contexts/auth-context"
 import { AIFinancialReport } from "@/components/ai-financial-report"
@@ -360,21 +361,23 @@ export default function SummaryPage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-white">
+      <div className="app-surface">
         <Navbar />
 
       <main className="pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">Financial Summary</h1>
-            <p className="text-slate-600">Your complete financial journey at a glance</p>
+            <PageHeader
+              title="Summary"
+              subtitle="The whole picture — measured where we have transactions, planned where we don't."
+            />
           </motion.div>
 
           {/* Month Navigation */}
           {monthlyProjections.length > 0 && (
             <div className="relative z-10">
-              <Card className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100">
+              <Card className="app-card">
                 <CardContent className="p-3 sm:p-4">
                   {/* Mobile Layout */}
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

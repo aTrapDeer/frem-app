@@ -13,6 +13,7 @@ import {
 import Link from "next/link"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
+import { PageHeader } from "@/components/page-header"
 import { useAuth } from "@/contexts/auth-context"
 
 interface Milestone {
@@ -76,31 +77,30 @@ export default function Roadmap() {
       case "in-progress":
         return <Circle className="h-5 w-5 text-blue-500" />
       case "planned":
-        return <Circle className="h-5 w-5 text-gray-400" />
+        return <Circle className="h-5 w-5 text-slate-400" />
       default:
-        return <Circle className="h-5 w-5 text-gray-400" />
+        return <Circle className="h-5 w-5 text-slate-400" />
     }
   }
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-white">
+      <div className="app-surface">
         <Navbar />
 
       <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-800 mb-4">Financial Roadmap</h1>
-            <p className="text-gray-600">Track your progress toward major financial milestones</p>
-          </div>
+          <PageHeader
+            title="Roadmap"
+            subtitle="Milestones on the way to where you're headed."
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Milestones */}
             <div className="lg:col-span-2">
-              <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
+              <Card className="app-card p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-semibold text-gray-800">Your Milestones</h3>
+                  <h3 className="text-xl font-semibold text-slate-800">Your Milestones</h3>
                   <Link href="/goals">
                     <Button
                       variant="outline"
@@ -151,7 +151,7 @@ export default function Roadmap() {
                       return (
                         <div
                           key={milestone.id}
-                          className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-4 transition-all duration-300 hover:border-gray-300 hover:shadow-md"
+                          className="app-card group relative overflow-hidden p-4"
                         >
                           <div className="flex items-start space-x-4">
                             <div
@@ -163,11 +163,11 @@ export default function Roadmap() {
                             <div className="flex-1 space-y-3">
                               <div className="flex items-start justify-between">
                                 <div>
-                                  <h4 className="text-base font-semibold text-gray-800">{milestone.title}</h4>
-                                  <p className="text-sm text-gray-600 mt-1">{milestone.description}</p>
+                                  <h4 className="text-base font-semibold text-slate-800">{milestone.title}</h4>
+                                  <p className="text-sm text-slate-600 mt-1">{milestone.description}</p>
                                 </div>
                                 <div className="text-right">
-                                  <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700 capitalize">
+                                  <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 capitalize">
                                     {milestone.priority} Priority
                                   </span>
                                 </div>
@@ -176,15 +176,15 @@ export default function Roadmap() {
                               {milestone.target_amount && (
                                 <div className="space-y-3">
                                   <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">Progress</span>
-                                    <span className="font-medium text-gray-800">
+                                    <span className="text-slate-600">Progress</span>
+                                    <span className="font-medium text-slate-800">
                                       ${milestone.current_amount.toLocaleString()} / ${milestone.target_amount.toLocaleString()}
                                     </span>
                                   </div>
 
                                   <Progress value={progress} className="h-2" />
 
-                                  <div className="flex justify-between text-sm text-gray-600">
+                                  <div className="flex justify-between text-sm text-slate-600">
                                     <span>{Math.round(progress)}% complete</span>
                                     {daysLeft !== null && (
                                       <span>{daysLeft > 0 ? `${daysLeft} days left` : "Overdue"}</span>
@@ -204,8 +204,8 @@ export default function Roadmap() {
 
             {/* Quick Actions */}
             <div>
-              <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
+              <Card className="app-card p-6">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h3>
 
                 <div className="space-y-3">
                   <Link href="/goals">

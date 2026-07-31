@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { useAuth } from "@/contexts/auth-context"
 import { Plus, Minus, DollarSign, TrendingUp, Target, TrendingDown, CheckCircle2, Clock, AlertTriangle } from "lucide-react"
 import { Navbar } from "@/components/navbar"
+import { PageHeader } from "@/components/page-header"
 
 interface Transaction {
   id: string
@@ -137,7 +138,7 @@ export default function DailyInterface() {
   // Show loading state
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="app-surface flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-600 border-t-transparent"></div>
       </div>
     )
@@ -204,49 +205,37 @@ export default function DailyInterface() {
   const progressPercentage = Math.max(0, Math.min((dailyTotal / dailyGoal) * 100, 100))
   
   // Calculate how close we are to covering obligations
-  const dailyObligation = dailyGoal
-  const surplus = dailyTotal - dailyObligation
-  const isOnTrack = surplus >= 0
+  const surplus = dailyTotal - dailyGoal
 
   return (
-    <div className="bg-white min-h-screen">
+    <div className="app-surface">
       <Navbar />
 
       <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-800 mb-4">Today&apos;s Financial Activity</h1>
-            <p className="text-gray-600">Track your daily income and expenses with ease</p>
-          </div>
+          <PageHeader
+            title="Daily"
+            subtitle="Log today's cash by hand — synced accounts fill in the rest on their own."
+          />
 
           {/* Daily Summary */}
-          <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-8 rounded-3xl mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <DollarSign className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-3xl font-bold text-gray-800">${dailyTotal.toFixed(2)}</p>
-                <p className="text-gray-600">Today&apos;s Total</p>
+          <Card className="app-card p-6 sm:p-8 mb-8">
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Today</p>
+                <p className="text-2xl sm:text-3xl font-bold font-numbers text-slate-900 mt-1">${dailyTotal.toFixed(2)}</p>
               </div>
 
-              <div className="text-center">
-                <div className={`w-16 h-16 ${isOnTrack ? 'bg-green-500' : 'bg-orange-500'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
-                  <Target className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-3xl font-bold text-gray-800">${dailyGoal.toFixed(2)}</p>
-                <p className="text-gray-600">Daily Target</p>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Daily target</p>
+                <p className="text-2xl sm:text-3xl font-bold font-numbers text-slate-900 mt-1">${dailyGoal.toFixed(2)}</p>
               </div>
 
-              <div className="text-center">
-                <div className={`w-16 h-16 ${surplus >= 0 ? 'bg-green-500' : 'bg-red-500'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
-                  {surplus >= 0 ? <TrendingUp className="h-8 w-8 text-white" /> : <TrendingDown className="h-8 w-8 text-white" />}
-                </div>
-                <p className={`text-3xl font-bold ${surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {surplus >= 0 ? '+' : ''}${surplus.toFixed(2)}
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{surplus >= 0 ? 'Surplus' : 'Deficit'}</p>
+                <p className={`text-2xl sm:text-3xl font-bold font-numbers mt-1 ${surplus >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {surplus >= 0 ? '+' : '−'}${Math.abs(surplus).toFixed(2)}
                 </p>
-                <p className="text-gray-600">{surplus >= 0 ? 'Surplus' : 'Deficit'}</p>
               </div>
             </div>
 
@@ -272,10 +261,9 @@ export default function DailyInterface() {
                   {targetData.dailySurplusDeficit !== 0 && (
                     <div className="mt-2 text-xs">
                       <span className={`${targetData.dailySurplusDeficit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {targetData.dailySurplusDeficit >= 0 ? '💚' : '⚠️'} 
-                        {targetData.dailySurplusDeficit >= 0 
-                          ? ` You're on track! ${targetData.dailySurplusDeficit.toFixed(2)}/day surplus expected`
-                          : ` Need ${Math.abs(targetData.dailySurplusDeficit).toFixed(2)}/day more income to meet goals`
+                                                {targetData.dailySurplusDeficit >= 0 
+                          ? `On track — $${targetData.dailySurplusDeficit.toFixed(2)}/day of headroom`
+                          : `Short $${Math.abs(targetData.dailySurplusDeficit).toFixed(2)}/day of what the plan needs`
                         }
                       </span>
                     </div>
@@ -286,13 +274,13 @@ export default function DailyInterface() {
 
             {/* Progress Bar */}
             <div className="space-y-2">
-              <div className="flex justify-between text-sm text-gray-600">
+              <div className="flex justify-between text-sm text-slate-600">
                 <span>Progress to Goal</span>
                 <span>{Math.round(progressPercentage)}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-4">
+              <div className="w-full bg-slate-200 rounded-full h-2">
                 <div
-                  className="bg-blue-600 h-4 rounded-full transition-all duration-500 ease-out"
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
@@ -355,12 +343,12 @@ export default function DailyInterface() {
           {/* Input Section */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Add Income */}
-            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-4 rounded-2xl">
+            <Card className="app-card p-4">
               <div className="flex items-center space-x-2 mb-2">
-                <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
                   <Plus className="h-4 w-4 text-white" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800">Add Income</h3>
+                <h3 className="text-lg font-semibold text-slate-900">Add Income</h3>
               </div>
 
               <div className="space-y-3">
@@ -374,7 +362,7 @@ export default function DailyInterface() {
                     placeholder="0.00"
                     value={incomeAmount}
                     onChange={(e) => setIncomeAmount(e.target.value)}
-                    className="bg-white border-gray-200 text-sm"
+                    className="text-sm"
                     disabled={submitting}
                   />
                 </div>
@@ -387,13 +375,13 @@ export default function DailyInterface() {
                     placeholder="e.g., Freelance work"
                     value={incomeDescription}
                     onChange={(e) => setIncomeDescription(e.target.value)}
-                    className="bg-white border-gray-200 text-sm"
+                    className="text-sm"
                     disabled={submitting}
                   />
                 </div>
                 <Button
                   onClick={() => addTransaction("income")}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-2"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-2"
                   disabled={!incomeAmount || !incomeDescription || submitting}
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -403,12 +391,12 @@ export default function DailyInterface() {
             </Card>
 
             {/* Add Expense */}
-            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-4 rounded-2xl">
+            <Card className="app-card p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
                   <Minus className="h-4 w-4 text-white" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800">Add Expense</h3>
+                <h3 className="text-lg font-semibold text-slate-900">Add Expense</h3>
               </div>
 
               <div className="space-y-3">
@@ -422,7 +410,7 @@ export default function DailyInterface() {
                     placeholder="0.00"
                     value={expenseAmount}
                     onChange={(e) => setExpenseAmount(e.target.value)}
-                    className="bg-white border-gray-200 text-sm"
+                    className="text-sm"
                     disabled={submitting}
                   />
                 </div>
@@ -435,13 +423,13 @@ export default function DailyInterface() {
                     placeholder="e.g., Lunch, Transportation"
                     value={expenseDescription}
                     onChange={(e) => setExpenseDescription(e.target.value)}
-                    className="bg-white border-gray-200 text-sm"
+                    className="text-sm"
                     disabled={submitting}
                   />
                 </div>
                 <Button
                   onClick={() => addTransaction("expense")}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white text-sm py-2"
+                  className="w-full bg-slate-800 hover:bg-slate-900 text-white text-sm py-2"
                   disabled={!expenseAmount || !expenseDescription || submitting}
                 >
                   <Minus className="h-4 w-4 mr-2" />
@@ -452,21 +440,21 @@ export default function DailyInterface() {
           </div>
 
           {/* Recent Entries */}
-          <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Today&apos;s Entries</h3>
+          <Card className="app-card p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Today&apos;s Entries</h3>
 
             {transactionsLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="animate-pulse flex items-center justify-between p-4 bg-slate-50 rounded-xl">
                     <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
+                      <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
                       <div className="space-y-1">
-                        <div className="h-4 bg-gray-200 rounded w-24"></div>
-                        <div className="h-3 bg-gray-200 rounded w-16"></div>
+                        <div className="h-4 bg-slate-200 rounded w-24"></div>
+                        <div className="h-3 bg-slate-200 rounded w-16"></div>
                       </div>
                     </div>
-                    <div className="h-6 bg-gray-200 rounded w-16"></div>
+                    <div className="h-6 bg-slate-200 rounded w-16"></div>
                   </div>
                 ))}
               </div>
@@ -492,7 +480,7 @@ export default function DailyInterface() {
                         <div
                           className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                             transaction.type === "income"
-                              ? "bg-green-500"
+                              ? "bg-emerald-500"
                               : "bg-red-500"
                           }`}
                         >
@@ -503,12 +491,12 @@ export default function DailyInterface() {
                           )}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-800">{transaction.description}</p>
-                          <p className="text-sm text-gray-600">{time}</p>
+                          <p className="font-medium text-slate-900">{transaction.description}</p>
+                          <p className="text-sm text-slate-600">{time}</p>
                         </div>
                       </div>
                       <div
-                        className={`text-lg font-semibold ${transaction.type === "income" ? "text-green-600" : "text-red-600"}`}
+                        className={`text-lg font-semibold ${transaction.type === "income" ? "text-emerald-600" : "text-red-600"}`}
                       >
                         {transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}
                       </div>

@@ -15,17 +15,9 @@
   --success: 34 197 94;
 }
 
+/* Default border: soft slate. Classes may override — no !important. */
 * {
-  border-color: rgb(148 163 184);
-}
-
-/* Force override gray borders that might appear yellow */
-.border-gray-200 {
-  border-color: rgb(148 163 184) !important;
-}
-
-.border-slate-200 {
-  border-color: rgb(148 163 184) !important;
+  border-color: rgb(226 232 240);
 }
 
 body {
@@ -170,13 +162,51 @@ h6 {
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
-/* Glass cards */
-.glass-card {
-  background-color: rgb(255 255 255 / 0.8);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  border: 1px solid rgb(226 232 240 / 0.5);
+/* ── App design system (signed-in pages) ─────────────────────────────
+   One surface, one card, one chip set. Pages compose these; they don't
+   invent their own greys, radii, or shadows. */
+
+/* Page surface: warm off-white so white cards actually read as cards */
+.app-surface {
+  min-height: 100vh;
+  background-color: rgb(248 250 252);
 }
+
+/* The card. glass-card is aliased to it so legacy markup unifies free. */
+.app-card,
+.glass-card {
+  background-color: white;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  backdrop-filter: none;
+}
+
+/* Page title: the landing page's display voice, inside the app */
+.page-title {
+  font-family: var(--font-display), var(--font-inter), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: rgb(15 23 42);
+}
+
+/* Chips: basis + entity, identical on every page */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+.chip-measured { background-color: rgb(209 250 229); color: rgb(4 120 87); }
+.chip-plan     { background-color: rgb(241 245 249); color: rgb(71 85 105); }
+.chip-biz      { background-color: rgb(237 233 254); color: rgb(109 40 217); }
+.chip-personal { background-color: rgb(224 231 255); color: rgb(67 56 202); }
 
 /* Fix yellow background on autofill inputs */
 input:-webkit-autofill,
@@ -241,27 +271,6 @@ select:-webkit-autofill:focus {
   background-color: white !important;
   background-image: none !important;
   color: rgb(100 116 139) !important;
-}
-
-/* Additional yellow/amber overrides */
-* {
-  --tw-ring-color: rgb(59 130 246) !important;
-  --tw-border-opacity: 1 !important;
-}
-
-/* Force override any remaining yellow/amber colors */
-.bg-yellow-50,
-.bg-amber-50,
-.border-yellow-200,
-.border-amber-200,
-.text-yellow-600,
-.text-amber-600,
-.ring-yellow-500,
-.ring-amber-500 {
-  background-color: rgb(248 250 252) !important;
-  border-color: rgb(226 232 240) !important;
-  color: rgb(100 116 139) !important;
-  --tw-ring-color: rgb(59 130 246) !important;
 }
 
 /* Hero section background pattern */

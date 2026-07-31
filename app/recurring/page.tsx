@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Calendar, DollarSign, Plus, Trash2, RefreshCw, List, Wallet, Receipt, Pencil, X, Sparkles } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
+import { PageHeader } from "@/components/page-header"
 import { useAuth } from "@/contexts/auth-context"
 import { IncomeSources } from "@/components/income-sources"
 import { OneTimeTransactions } from "@/components/one-time-transactions"
@@ -252,16 +253,15 @@ export default function RecurringExpenses() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-white">
+      <div className="app-surface">
         <Navbar />
 
       <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Budget</h1>
-            <p className="text-gray-600">Manage your income sources, recurring costs, and one-time transactions</p>
-          </div>
+          <PageHeader
+            title="Budget"
+            subtitle="Income sources, monthly bills, and one-time transactions — the plan side of your money."
+          />
 
           {/* Tab Toggle */}
           <div className="flex bg-slate-100 rounded-xl p-1 mb-8 max-w-2xl">
@@ -316,7 +316,7 @@ export default function RecurringExpenses() {
             <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-gray-800">Edit Expense</h3>
+                  <h3 className="text-xl font-bold text-slate-800">Edit Expense</h3>
                   <Button variant="ghost" size="sm" onClick={closeEditModal}>
                     <X className="h-5 w-5" />
                   </Button>
@@ -330,7 +330,7 @@ export default function RecurringExpenses() {
                       placeholder="e.g., Netflix, Rent"
                       value={editForm.name}
                       onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                      className="bg-white border-gray-200"
+                      className="bg-white border-slate-200"
                     />
                   </div>
 
@@ -341,7 +341,7 @@ export default function RecurringExpenses() {
                     placeholder="e.g., Annual plan, split with roommate"
                     value={editForm.description}
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                    className="bg-white border-gray-200"
+                    className="bg-white border-slate-200"
                   />
                 </div>
 
@@ -353,7 +353,7 @@ export default function RecurringExpenses() {
                       placeholder="0.00"
                       value={editForm.amount}
                       onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                      className="bg-white border-gray-200"
+                      className="bg-white border-slate-200"
                     />
                   </div>
 
@@ -363,7 +363,7 @@ export default function RecurringExpenses() {
                       id="edit-expense-category"
                       value={editForm.category}
                       onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                      className="w-full h-10 px-3 py-2 bg-white border border-gray-200 rounded-md text-sm"
+                      className="w-full h-10 px-3 py-2 bg-white border border-slate-200 rounded-md text-sm"
                     >
                       <option value="">Select category</option>
                       <option value="housing">🏠 Housing</option>
@@ -388,7 +388,7 @@ export default function RecurringExpenses() {
                       placeholder="1-31"
                       value={editForm.dueDate}
                       onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
-                      className="bg-white border-gray-200"
+                      className="bg-white border-slate-200"
                     />
                   </div>
 
@@ -417,46 +417,46 @@ export default function RecurringExpenses() {
           <>
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
+            <Card className="app-card p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                   <DollarSign className="h-6 w-6 text-white" />
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-800">${totalMonthly.toFixed(2)}</p>
-                <p className="text-sm text-gray-600">Total Monthly</p>
+                <p className="text-2xl font-bold text-slate-800">${totalMonthly.toFixed(2)}</p>
+                <p className="text-sm text-slate-600">Total Monthly</p>
               </div>
             </Card>
 
-            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
+            <Card className="app-card p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
                   <Calendar className="h-6 w-6 text-white" />
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-800">${dailyImpact.toFixed(2)}</p>
-                <p className="text-sm text-gray-600">Daily Impact</p>
+                <p className="text-2xl font-bold text-slate-800">${dailyImpact.toFixed(2)}</p>
+                <p className="text-sm text-slate-600">Daily Impact</p>
               </div>
             </Card>
 
-            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
+            <Card className="app-card p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
                   <RefreshCw className="h-6 w-6 text-white" />
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-800">{expenses.length}</p>
-                <p className="text-sm text-gray-600">Active Subscriptions</p>
+                <p className="text-2xl font-bold text-slate-800">{expenses.length}</p>
+                <p className="text-sm text-slate-600">Active Subscriptions</p>
               </div>
             </Card>
           </div>
 
           {/* Expense Projections */}
           {expenses.length > 0 && (
-            <Card className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-lg mb-8">
+            <Card className="app-card mb-8">
               <CardContent className="p-6">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
                   <div>
@@ -468,7 +468,7 @@ export default function RecurringExpenses() {
                           variant={timeRange === range ? 'secondary' : 'ghost'}
                           size="sm"
                           onClick={() => setTimeRange(range)}
-                          className={`text-white ${timeRange === range ? 'bg-white/20' : 'hover:bg-white/10'}`}
+                          className={`text-slate-900 ${timeRange === range ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
                         >
                           {range === 'month' ? '1M' : range === 'quarter' ? '3M' : '12M'}
                         </Button>
@@ -479,8 +479,8 @@ export default function RecurringExpenses() {
                     <div className="text-3xl font-bold mb-1">
                       ${projectedData.amount.toLocaleString()}
                     </div>
-                    <p className="text-sm text-white/80">Total for {projectedData.period}</p>
-                    <p className="text-xs text-white/60">
+                    <p className="text-sm text-slate-600">Total for {projectedData.period}</p>
+                    <p className="text-xs text-slate-500">
                       ~${averageDaily.toFixed(2)}/day average
                     </p>
                   </div>
@@ -492,9 +492,9 @@ export default function RecurringExpenses() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Expenses List */}
             <div className="lg:col-span-2">
-              <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
+              <Card className="app-card p-6">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-semibold text-gray-800">Monthly Expenses</h3>
+                  <h3 className="text-xl font-semibold text-slate-800">Monthly Expenses</h3>
                   <div className="flex space-x-2">
                     <Button
                       variant={viewMode === 'list' ? 'default' : 'outline'}
@@ -555,8 +555,8 @@ export default function RecurringExpenses() {
                           <DollarSign className="h-5 w-5 text-white" />
                         </div>
                         <div>
-                          <h4 className="font-medium text-gray-800">{expense.name}</h4>
-                          <div className="flex items-center space-x-4 text-sm text-gray-600">
+                          <h4 className="font-medium text-slate-800">{expense.name}</h4>
+                          <div className="flex items-center space-x-4 text-sm text-slate-600">
                             <span>{expense.category}</span>
                             <span>•</span>
                             <span>
@@ -580,8 +580,8 @@ export default function RecurringExpenses() {
 
                       <div className="flex items-center space-x-4">
                         <div className="text-right">
-                          <p className="text-lg font-semibold text-gray-800">${expense.amount}</p>
-                          <p className="text-sm text-gray-600">/month</p>
+                          <p className="text-lg font-semibold text-slate-800">${expense.amount}</p>
+                          <p className="text-sm text-slate-600">/month</p>
                         </div>
                         <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
@@ -624,7 +624,7 @@ export default function RecurringExpenses() {
                       >
                         ←
                       </Button>
-                      <h4 className="text-lg font-semibold text-gray-800">
+                      <h4 className="text-lg font-semibold text-slate-800">
                         {monthNames[selectedMonth.getMonth()]} {selectedMonth.getFullYear()}
                       </h4>
                       <Button
@@ -643,7 +643,7 @@ export default function RecurringExpenses() {
                     {/* Calendar Grid */}
                     <div className="grid grid-cols-7 gap-2 mb-4">
                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                        <div key={day} className="text-center text-sm font-medium text-gray-500 p-2">
+                        <div key={day} className="text-center text-sm font-medium text-slate-500 p-2">
                           {day}
                         </div>
                       ))}
@@ -651,11 +651,11 @@ export default function RecurringExpenses() {
                       {getDaysInMonth(selectedMonth).map((day, index) => (
                         <div
                           key={index}
-                          className={`min-h-[80px] p-2 border border-gray-200 rounded ${!day ? 'bg-gray-50' : 'bg-white hover:bg-gray-50'}`}
+                          className={`min-h-[80px] p-2 border border-slate-200 rounded ${!day ? 'bg-slate-50' : 'bg-white hover:bg-slate-50'}`}
                         >
                           {day && (
                             <>
-                              <div className="text-sm font-medium text-gray-800 mb-1">{day}</div>
+                              <div className="text-sm font-medium text-slate-800 mb-1">{day}</div>
                               {getExpensesForDay(day).map(expense => (
                                 <div
                                   key={expense.id}
@@ -679,7 +679,7 @@ export default function RecurringExpenses() {
                         return (
                           <div key={category} className="flex items-center space-x-2">
                             <div className={`w-3 h-3 rounded ${getCategoryColor(category)}`}></div>
-                            <span className="text-gray-600 capitalize">{category} ({categoryExpenses.length})</span>
+                            <span className="text-slate-600 capitalize">{category} ({categoryExpenses.length})</span>
                           </div>
                         )
                       })}
@@ -691,8 +691,8 @@ export default function RecurringExpenses() {
 
             {/* Add New Expense */}
             <div>
-              <Card className="bg-white border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 p-6 rounded-2xl">
-                <h3 className="text-xl font-semibold text-gray-800 mb-6">Add New Expense</h3>
+              <Card className="app-card p-6">
+                <h3 className="text-xl font-semibold text-slate-800 mb-6">Add New Expense</h3>
 
                 <div className="space-y-4">
                   <div>
@@ -702,7 +702,7 @@ export default function RecurringExpenses() {
                       placeholder="e.g., Netflix, Rent"
                       value={newExpense.name}
                       onChange={(e) => setNewExpense({ ...newExpense, name: e.target.value })}
-                      className="bg-white border-gray-200"
+                      className="bg-white border-slate-200"
                     />
                   </div>
 
@@ -713,7 +713,7 @@ export default function RecurringExpenses() {
                       placeholder="e.g., Annual plan, shared subscription"
                       value={newExpense.description}
                       onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
-                      className="bg-white border-gray-200"
+                      className="bg-white border-slate-200"
                     />
                   </div>
 
@@ -725,7 +725,7 @@ export default function RecurringExpenses() {
                       placeholder="0.00"
                       value={newExpense.amount}
                       onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                      className="bg-white border-gray-200"
+                      className="bg-white border-slate-200"
                     />
                   </div>
 
@@ -735,7 +735,7 @@ export default function RecurringExpenses() {
                       id="expense-category"
                       value={newExpense.category}
                       onChange={(e) => setNewExpense({ ...newExpense, category: e.target.value })}
-                      className="w-full h-10 px-3 py-2 bg-white border border-gray-200 rounded-md text-sm"
+                      className="w-full h-10 px-3 py-2 bg-white border border-slate-200 rounded-md text-sm"
                     >
                       <option value="">Select category</option>
                       <option value="housing">🏠 Housing</option>
@@ -760,7 +760,7 @@ export default function RecurringExpenses() {
                       placeholder="1-31"
                       value={newExpense.dueDate}
                       onChange={(e) => setNewExpense({ ...newExpense, dueDate: e.target.value })}
-                      className="bg-white border-gray-200"
+                      className="bg-white border-slate-200"
                     />
                   </div>
 

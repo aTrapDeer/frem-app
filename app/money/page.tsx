@@ -5,12 +5,13 @@ import Link from "next/link"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { MoneyView } from "@/components/money-view"
+import { PageHeader } from "@/components/page-header"
 import { ArrowRight } from "lucide-react"
 
 export default function MoneyPage() {
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-white">
+      <div className="app-surface">
         <Navbar />
 
         <main className="pt-24 pb-12">
@@ -20,22 +21,19 @@ export default function MoneyPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                  <h1 className="text-4xl font-bold text-slate-900 mb-2">Money</h1>
-                  <p className="text-slate-600">
-                    Your plan, your budget, and what actually happened — in one place.
-                  </p>
-                </div>
-
-                <Link
-                  href="/accounts"
-                  className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                >
-                  Manage accounts
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
+              <PageHeader
+                title="Money"
+                subtitle="Everything the ledger measured, and the plan it's measured against."
+                actions={(
+                  <Link
+                    href="/accounts"
+                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  >
+                    Manage accounts
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+              />
             </motion.div>
 
             <motion.div

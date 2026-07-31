@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { PrivacyToggle } from "@/components/privacy-toggle"
+import { PageHeader } from "@/components/page-header"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
@@ -140,7 +141,7 @@ export default function DashboardPage() {
   // Show loading state
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="app-surface flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-600 border-t-transparent"></div>
       </div>
     )
@@ -153,17 +154,21 @@ export default function DashboardPage() {
   const displayedSurplus = personalSurplus?.value ?? projections?.monthlySurplus ?? 0
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="app-surface">
       <Navbar />
 
       <main className="pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <div className="flex items-center justify-between gap-4">
-              <h1 className="text-4xl font-bold text-slate-900 mb-2">Dashboard</h1>
-              <PrivacyToggle />
-            </div>
-            <p className="text-slate-600">Welcome back! Here&apos;s your financial overview.</p>
+            <PageHeader
+              title="Dashboard"
+              subtitle={
+                personalSurplus
+                  ? `Personal surplus ${displayedSurplus >= 0 ? '+' : '−'}${formatCurrency(Math.abs(displayedSurplus))}/mo, ${personalSurplus.basis === 'measured' ? `measured from ${personalSurplus.monthsOfData} months of transactions` : 'from your plan'}.`
+                  : 'Where your money stands today.'
+              }
+              actions={<PrivacyToggle />}
+            />
           </motion.div>
 
           {dataLoading ? (
@@ -200,7 +205,7 @@ export default function DashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
             >
-              <Card className="bg-gradient-to-r from-slate-50 to-blue-50 border border-slate-200 shadow-sm">
+              <Card className="app-card">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -404,9 +409,9 @@ function QuickStatCard({ title, value, index }: QuickStatCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.2 + index * 0.05 }}
     >
-      <Card className="glass-card p-4 text-center">
-        <div className="text-2xl font-bold text-slate-900">{value}</div>
-        <div className="text-sm text-slate-600">{title}</div>
+      <Card className="app-card p-4">
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</div>
+        <div className="text-2xl font-bold font-numbers text-slate-900 mt-1">{value}</div>
       </Card>
     </motion.div>
   )

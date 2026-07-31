@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Navbar } from "@/components/navbar"
+import { PageHeader } from "@/components/page-header"
 import { AuthGuard } from "@/components/auth-guard"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -446,14 +447,16 @@ export default function GoalsPage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-white">
+      <div className="app-surface">
         <Navbar />
 
       <main className="pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">Financial Goals</h1>
-            <p className="text-slate-600">Set targets and track your progress</p>
+            <PageHeader
+              title="Goals"
+              subtitle="What you're building toward, funded by measured surplus."
+            />
           </motion.div>
 
           {/* Projection Summary Banner */}
@@ -463,7 +466,7 @@ export default function GoalsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <Card className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 shadow-sm">
+              <Card className="app-card">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
