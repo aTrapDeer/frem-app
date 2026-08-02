@@ -14,6 +14,7 @@ import {
   titleFromMessage,
 } from '@/lib/chat-history'
 import { generateUUID } from '@/lib/turso'
+import { CHAT_ACTION_TOOLS, describeChatAction, parseChatAction, type ChatAction } from '@/lib/chat-actions'
 
 const MODEL_NAME = 'gpt-5.2-2025-12-11'
 
@@ -264,11 +265,25 @@ export async function POST(request: Request) {
       model: MODEL_NAME,
       messages,
       temperature: 0.7,
-      max_completion_tokens: 8000 // Shorter responses for chat
+      max_completion_tokens: 8000, // Shorter responses for chat
+      tools: CHAT_ACTION_TOOLS,
+      tool_choice: 'auto',
     })
-    
-    const responseContent = completion.choices[0]?.message?.content
-    
+
+    const choice = completion.choices[0]?.message
+
+    // A tool call is a PROPOSAL — nothing executes until the user confirms
+    let proposedAction: (ChatAction & { label: string }) | null = null
+    const toolCall = choice?.tool_calls?.[0]
+    if (toolCall && toolCall.type === 'function') {
+      const parsed = parseChatAction(toolCall.function.name, toolCall.function.arguments)
+      if (parsed) proposedAction = { ...parsed, label: describeChatAction(parsed) }
+    }
+
+    const responseContent =
+      choice?.content ??
+      (proposedAction ? `I can do that for you — confirm below and it's done.` : null)
+
     if (!responseContent) {
       console.error('OpenAI returned empty response in chat')
       return Response.json({ 
@@ -310,6 +325,7 @@ export async function POST(request: Request) {
       message: responseContent,
       usage: completion.usage,
       conversationId,
+      ...(proposedAction ? { proposedAction } : {}),
     })
   } catch (error) {
     console.error('Error in AI chat:', error)

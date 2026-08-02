@@ -9,11 +9,19 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Send, Bot, User, Loader2, Sparkles, AlertCircle, Plus, History, Trash2, X, Mic, PhoneOff } from "lucide-react"
 
+interface ProposedAction {
+  type: string
+  params: Record<string, unknown>
+  label: string
+}
+
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  action?: ProposedAction
+  actionState?: 'pending' | 'done' | 'dismissed' | 'failed'
 }
 
 interface Conversation {
@@ -253,7 +261,10 @@ export default function ChatPage() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: data.message,
-        timestamp: new Date()
+        timestamp: new Date(),
+        ...(data.proposedAction
+          ? { action: data.proposedAction as ProposedAction, actionState: 'pending' as const }
+          : {}),
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -308,6 +319,35 @@ export default function ChatPage() {
     setActiveId(null)
     setError(null)
     setHistoryOpen(false)
+  }
+
+  const resolveAction = async (messageId: string, run: boolean) => {
+    const target = messages.find(m => m.id === messageId)
+    if (!target?.action) return
+    if (!run) {
+      setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, actionState: 'dismissed' } : m)))
+      return
+    }
+    try {
+      const response = await fetch('/api/chat-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: target.action.type,
+          params: target.action.params,
+          conversationId: activeId ?? undefined,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Action failed')
+      setMessages(prev => [
+        ...prev.map(m => (m.id === messageId ? { ...m, actionState: 'done' as const } : m)),
+        { id: `action-${Date.now()}`, role: 'assistant', content: `✓ ${data.summary}`, timestamp: new Date() },
+      ])
+    } catch (err) {
+      setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, actionState: 'failed' } : m)))
+      setError(err instanceof Error ? err.message : 'Action failed')
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -538,6 +578,37 @@ export default function ChatPage() {
                                   {message.content}
                                 </ReactMarkdown>
                               </div>
+                              {message.action && (
+                                <div className="mt-3 p-3 rounded-lg border border-indigo-200 bg-indigo-50/60">
+                                  <p className="text-sm font-medium text-indigo-900">{message.action.label}</p>
+                                  {message.actionState === 'pending' ? (
+                                    <div className="flex gap-2 mt-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => resolveAction(message.id, true)}
+                                        className="px-3 py-1.5 text-sm font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+                                      >
+                                        Confirm
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => resolveAction(message.id, false)}
+                                        className="px-3 py-1.5 text-sm font-medium rounded-md text-slate-600 hover:bg-slate-100"
+                                      >
+                                        Not now
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs mt-1 text-slate-500">
+                                      {message.actionState === 'done'
+                                        ? 'Applied.'
+                                        : message.actionState === 'failed'
+                                          ? "Couldn't apply — see the error below."
+                                          : 'Skipped.'}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
                               <div className={`text-xs mt-2 ${
                                 message.role === 'user' ? 'text-indigo-200' : 'text-slate-400'
                               }`}>
