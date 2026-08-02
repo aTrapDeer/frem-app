@@ -207,6 +207,17 @@ export async function deleteCategoryCap(userId: string, category: string, entity
  * to the category as unplanned, which is honest — better to show $85 of
  * unexplained subscription spend than to silently attribute it to Netflix.
  */
+/** How many days of the given month have elapsed as of today — full for past
+ *  months, zero for future ones. The requested month says nothing about how
+ *  much of it has happened; only today's date does. */
+function daysElapsedIn(monthStart: Date, daysInMonth: number): number {
+  const now = new Date()
+  const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth(), daysInMonth, 23, 59, 59)
+  if (now >= monthEnd) return daysInMonth
+  if (now < monthStart) return 0
+  return Math.min(now.getDate(), daysInMonth)
+}
+
 export async function getBudgetTree(
   userId: string,
   monthDate: Date = new Date(),
@@ -351,7 +362,7 @@ export async function getBudgetTree(
     ),
     categories: list,
     hasActuals,
-    daysElapsed: Math.min(monthDate.getDate(), daysInMonth),
+    daysElapsed: daysElapsedIn(start, daysInMonth),
     daysInMonth,
   }
 }
