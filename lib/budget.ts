@@ -67,6 +67,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   owner_pay: 'Owner pay',
   pets: 'Pets',
   debt: 'Debt payments',
+  credit_payments: 'Credit payments',
 }
 
 export function categoryLabel(value: string): string {
@@ -127,7 +128,13 @@ const PLAID_DETAILED_TO_APP: Record<string, string> = {
   rent_and_utilities_other_utilities: 'utilities',
   general_merchandise_pet_supplies: 'pets',
   medical_veterinary_services: 'pets',
+  // Card-issuer payments (Discover, Capital One, Credit One…) — distinct from
+  // other loan payments so credit spending is visible at a glance
+  loan_payments_credit_card_payment: 'credit_payments',
 }
+
+/** BNPL authorizers Plaid files as generic loan payments. */
+const CREDIT_AUTHORIZER = /\b(klarna|affirm|afterpay|sezzle|zip\s?pay)\b/i
 
 /** Categories that describe money moving rather than being spent. */
 function isMovement(category: string | null): boolean {
@@ -135,12 +142,21 @@ function isMovement(category: string | null): boolean {
   return key === 'transfer_out' || key === 'transfer_in'
 }
 
-export function toAppCategory(value: string | null | undefined, detailed?: string | null): string {
+export function toAppCategory(
+  value: string | null | undefined,
+  detailed?: string | null,
+  name?: string | null
+): string {
   // The finer category wins when it resolves; it is strictly more informative
   const detailedKey = normalizeCategory(detailed)
   if (PLAID_DETAILED_TO_APP[detailedKey]) return PLAID_DETAILED_TO_APP[detailedKey]
 
   const normalized = normalizeCategory(value)
+  // Klarna/Affirm-style installments arrive as generic loan payments; the
+  // payee name is the only signal they are credit, not a car or student loan
+  if (normalized === 'loan_payments' && name && CREDIT_AUTHORIZER.test(name)) {
+    return 'credit_payments'
+  }
   return PLAID_TO_APP[normalized] ?? normalized
 }
 
@@ -306,7 +322,9 @@ export async function getBudgetTree(
 
   // Actuals attach to an item when the names correspond, otherwise to the category
   for (const entry of spend) {
-    const node = ensure(toAppCategory(entry.category, entry.detailedCategory))
+    const node = ensure(
+      toAppCategory(entry.category, entry.detailedCategory, `${entry.merchantName ?? ''} ${entry.description}`)
+    )
     const haystack = `${entry.merchantName ?? ''} ${entry.description}`.toLowerCase()
 
     const matched = node.items.find(
