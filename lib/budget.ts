@@ -51,6 +51,8 @@ export type BudgetTree = {
   /** Days of the month covered so far; a partial month is not a full one. */
   daysElapsed: number
   daysInMonth: number
+  /** Outflows excluded as account-to-account movement (transfers, owner pay). */
+  excludedMovement: number
 }
 
 /** Plaid categories arrive as RENT_AND_UTILITIES; recurring expenses as 'housing'. */
@@ -63,6 +65,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   food: 'Food & Dining',
   groceries: 'Groceries',
   owner_pay: 'Owner pay',
+  pets: 'Pets',
+  debt: 'Debt payments',
 }
 
 export function categoryLabel(value: string): string {
@@ -93,7 +97,9 @@ const PLAID_TO_APP: Record<string, string> = {
   personal_care: 'other',
   general_merchandise: 'other',
   home_improvement: 'housing',
-  loan_payments: 'other',
+  // Klarna, Affirm, card payments: real cash leaving, but hiding them in
+  // 'Other' made the category unreadable. They get their own line.
+  loan_payments: 'debt',
   bank_fees: 'other',
   transfer_in: 'other',
   transfer_out: 'other',
@@ -119,6 +125,8 @@ const PLAID_DETAILED_TO_APP: Record<string, string> = {
   rent_and_utilities_water: 'utilities',
   rent_and_utilities_sewage_and_waste_management: 'utilities',
   rent_and_utilities_other_utilities: 'utilities',
+  general_merchandise_pet_supplies: 'pets',
+  medical_veterinary_services: 'pets',
 }
 
 /** Categories that describe money moving rather than being spent. */
@@ -247,6 +255,15 @@ export async function getBudgetTree(
   const spend = visible.filter(
     entry => entry.type === 'expense' && !internal.has(entry.id) && !isMovement(entry.category)
   )
+  // What the exclusions removed, so the UI can say where the money moved
+  const visibleIds = new Set(visible.map(entry => entry.id))
+  const excludedMovement = entries
+    .filter(
+      entry =>
+        entry.type === 'expense' &&
+        (internal.has(entry.id) || isMovement(entry.category) || !visibleIds.has(entry.id))
+    )
+    .reduce((sum, entry) => sum + entry.amount, 0)
   const hasActuals = entries.some(entry => entry.source === 'synced')
 
   const scopedExpenses = entity
@@ -364,5 +381,6 @@ export async function getBudgetTree(
     hasActuals,
     daysElapsed: daysElapsedIn(start, daysInMonth),
     daysInMonth,
+    excludedMovement: toCents(excludedMovement),
   }
 }

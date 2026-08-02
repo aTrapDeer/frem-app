@@ -31,6 +31,7 @@ interface BudgetCategory {
 
 interface BudgetTreeData {
   month: string
+  excludedMovement?: number
   daysElapsed: number
   daysInMonth: number
   totalPlanned: number
@@ -148,6 +149,12 @@ export function BudgetTree({ entity, month }: { entity: Entity | 'all'; month?: 
                 ? `Day ${data.daysElapsed} of ${data.daysInMonth} — the month is not over yet`
                 : 'Complete month'}
             </p>
+            {(data.excludedMovement ?? 0) > 0 && (
+              <p className="text-xs text-slate-400 mt-0.5">
+                {currency.format(data.excludedMovement ?? 0)} moved between your own accounts
+                (transfers, owner pay) — not counted as spending
+              </p>
+            )}
           </div>
         )}
 

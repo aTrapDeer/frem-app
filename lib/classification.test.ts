@@ -151,6 +151,7 @@ describe('AI classification categories', () => {
       'INSURANCE',
       'TRAVEL',
       'PERSONAL_CARE',
+      'PETS',
       'EDUCATION',
       'BUSINESS_SERVICES',
       'INCOME',

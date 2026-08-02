@@ -677,6 +677,7 @@ const CASH_CATEGORIES = [
   'housing',
   'utilities',
   'health',
+  'pets',
   'other',
 ] as const
 
