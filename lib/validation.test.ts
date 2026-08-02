@@ -64,12 +64,18 @@ describe('chatRequestSchema', () => {
     expect(chatRequestSchema.safeParse({ message: tooLong }).success).toBe(false)
   })
 
-  it('caps history length', () => {
-    const history = Array.from({ length: MAX_HISTORY_MESSAGES + 1 }, () => ({
+  it('trims history to the newest messages instead of rejecting long chats', () => {
+    const history = Array.from({ length: MAX_HISTORY_MESSAGES + 5 }, (_, index) => ({
       role: 'user' as const,
-      content: 'hi',
+      content: `message ${index}`,
     }))
-    expect(chatRequestSchema.safeParse({ message: 'hi', conversationHistory: history }).success).toBe(false)
+    const parsed = chatRequestSchema.safeParse({ message: 'hi', conversationHistory: history })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.conversationHistory).toHaveLength(MAX_HISTORY_MESSAGES)
+      // The newest turns survive; the oldest fall off
+      expect(parsed.data.conversationHistory.at(-1)?.content).toBe(`message ${MAX_HISTORY_MESSAGES + 4}`)
+    }
   })
 
   it('rejects an unknown role rather than passing it to the model', () => {

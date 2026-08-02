@@ -51,7 +51,12 @@ export const MAX_HISTORY_MESSAGE_LENGTH = 4000
 
 export const chatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
-  content: z.string().min(1).max(MAX_HISTORY_MESSAGE_LENGTH),
+  // History is context, not a contract: an over-long stored reply gets
+  // truncated for the model rather than failing the whole request
+  content: z
+    .string()
+    .min(1)
+    .transform(value => (value.length > MAX_HISTORY_MESSAGE_LENGTH ? value.slice(0, MAX_HISTORY_MESSAGE_LENGTH) : value)),
 })
 
 export const chatRequestSchema = z.object({
@@ -59,7 +64,13 @@ export const chatRequestSchema = z.object({
     .string()
     .min(1, 'Message cannot be empty')
     .max(MAX_CHAT_MESSAGE_LENGTH, `Message must be under ${MAX_CHAT_MESSAGE_LENGTH} characters`),
-  conversationHistory: z.array(chatMessageSchema).max(MAX_HISTORY_MESSAGES).optional().default([]),
+  // Long conversations keep their newest turns; the oldest fall off instead
+  // of the request being rejected once a chat outgrows the window
+  conversationHistory: z
+    .array(chatMessageSchema)
+    .optional()
+    .default([])
+    .transform(history => history.slice(-MAX_HISTORY_MESSAGES)),
 })
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>
