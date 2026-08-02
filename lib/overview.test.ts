@@ -1,5 +1,85 @@
 import { describe, expect, it } from 'vitest'
-import { calculateNetWorth, hasBusinessData, mapSurplus } from './overview'
+import {
+  RANGE_DAYS,
+  buildOverviewWindow,
+  calculateMonthlyRate,
+  calculateNetWorth,
+  calculateOverviewCoverage,
+  grantOverviewRange,
+  hasBusinessData,
+  mapSurplus,
+  parseOverviewRange,
+} from './overview'
+
+const TODAY = new Date('2026-08-01T12:00:00.000Z')
+
+describe('overview range parsing', () => {
+  it.each(['1w', '1m', '2m', '3m', '6m', '1y'] as const)(
+    'accepts the supported %s range',
+    range => {
+      expect(parseOverviewRange(range)).toBe(range)
+    }
+  )
+
+  it('ignores absent and invalid ranges', () => {
+    expect(parseOverviewRange(null)).toBeNull()
+    expect(parseOverviewRange(undefined)).toBeNull()
+    expect(parseOverviewRange('12m')).toBeNull()
+  })
+})
+
+describe('overview transaction coverage', () => {
+  it('reports no coverage without bank transactions', () => {
+    expect(calculateOverviewCoverage(null, TODAY)).toEqual({
+      earliestTransaction: null,
+      availableRanges: [],
+    })
+  })
+
+  it('uses the exact range cutoff as fully covered', () => {
+    expect(calculateOverviewCoverage('2026-05-02', TODAY)).toEqual({
+      earliestTransaction: '2026-05-02',
+      availableRanges: ['1w', '1m', '2m', '3m'],
+    })
+  })
+
+  it('does not include a range when history begins after its cutoff', () => {
+    expect(calculateOverviewCoverage('2026-07-26', TODAY).availableRanges).toEqual([])
+  })
+})
+
+describe('overview monthly rates', () => {
+  it('normalizes a raw window total to a 30.44-day monthly rate', () => {
+    expect(calculateMonthlyRate(700, RANGE_DAYS['1w'])).toBe(3044)
+    expect(calculateMonthlyRate(1_234.56, RANGE_DAYS['2m'])).toBe(616.07)
+  })
+})
+
+describe('overview calendar windows', () => {
+  it('builds an inclusive trailing window ending today', () => {
+    expect(buildOverviewWindow('1w', TODAY)).toEqual({
+      range: '1w',
+      days: 7,
+      start: '2026-07-26',
+      end: '2026-08-01',
+      label: 'past 7 days',
+    })
+  })
+})
+
+describe('overview granted ranges', () => {
+  it('keeps a requested range that is fully covered', () => {
+    expect(grantOverviewRange('2m', ['1w', '1m', '2m'])).toBe('2m')
+  })
+
+  it('downgrades an uncovered request to the widest covered range', () => {
+    expect(grantOverviewRange('1y', ['1w', '1m', '2m', '3m'])).toBe('3m')
+  })
+
+  it('uses the minimum window when no range is fully covered', () => {
+    expect(grantOverviewRange('6m', [])).toBe('1w')
+  })
+})
 
 describe('overview surplus basis', () => {
   it('maps actual ledger data to the measured basis', () => {

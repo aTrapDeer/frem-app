@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { getFinancialOverview } from '@/lib/overview'
+import { getFinancialOverview, parseOverviewRange } from '@/lib/overview'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth()
 
@@ -13,7 +13,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    return NextResponse.json(await getFinancialOverview(session.user.id), {
+    const range = parseOverviewRange(new URL(request.url).searchParams.get('range'))
+
+    return NextResponse.json(await getFinancialOverview(session.user.id, range ?? undefined), {
       headers: { 'Cache-Control': 'no-store' },
     })
   } catch (error) {

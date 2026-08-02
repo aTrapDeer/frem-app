@@ -8,6 +8,12 @@ import { getFinancialOverview, type EntityView } from '@/lib/overview'
 import OpenAI from 'openai'
 import { chatRequestSchema, parseBody } from '@/lib/validation'
 import { AI_CHAT_LIMIT, checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
+import {
+  appendMessages,
+  createConversation,
+  titleFromMessage,
+} from '@/lib/chat-history'
+import { generateUUID } from '@/lib/turso'
 
 const MODEL_NAME = 'gpt-5.2-2025-12-11'
 
@@ -186,6 +192,7 @@ export async function POST(request: Request) {
       return Response.json({ error: 'OpenAI API key not configured' }, { status: 500 })
     }
     
+    const requestCopy = request.clone()
     const validated = await parseBody(request, chatRequestSchema)
 
     if (!validated.ok) {
@@ -193,6 +200,15 @@ export async function POST(request: Request) {
     }
 
     const { message, conversationHistory } = validated.data
+    const rawBody: unknown = await requestCopy.json().catch(() => null)
+    const rawConversationId =
+      rawBody && typeof rawBody === 'object'
+        ? (rawBody as Record<string, unknown>).conversationId
+        : undefined
+    const requestedConversationId =
+      typeof rawConversationId === 'string' && rawConversationId.length > 0
+        ? rawConversationId
+        : undefined
 
     // Bound cost before doing any paid work
     const rateLimit = await checkRateLimit(session.user.id, AI_CHAT_LIMIT)
@@ -261,9 +277,39 @@ export async function POST(request: Request) {
       }, { status: 500 })
     }
     
+    let conversationId = generateUUID()
+    const messagesToPersist = [
+      { role: 'user' as const, content: message },
+      { role: 'assistant' as const, content: responseContent },
+    ]
+
+    try {
+      const appendedToExisting = requestedConversationId
+        ? await appendMessages(
+            session.user.id,
+            requestedConversationId,
+            messagesToPersist
+          )
+        : false
+
+      if (appendedToExisting && requestedConversationId) {
+        conversationId = requestedConversationId
+      } else {
+        const conversation = await createConversation(
+          session.user.id,
+          titleFromMessage(message)
+        )
+        conversationId = conversation.id
+        await appendMessages(session.user.id, conversationId, messagesToPersist)
+      }
+    } catch (error) {
+      console.error('Unable to persist AI chat conversation:', error)
+    }
+
     return Response.json({
       message: responseContent,
-      usage: completion.usage
+      usage: completion.usage,
+      conversationId,
     })
   } catch (error) {
     console.error('Error in AI chat:', error)
