@@ -189,22 +189,55 @@ export function MoneyView() {
 // Budget: how the month is going vs the plan
 // =============================================
 
+function currentMonthKey(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** Months from now back to the first bank transaction, newest first, max 12. */
+function monthOptions(earliest: string | null): Array<{ key: string; label: string }> {
+  const options: Array<{ key: string; label: string }> = []
+  const cursor = new Date()
+  cursor.setDate(1)
+  const floor = earliest ? earliest.slice(0, 7) : currentMonthKey()
+  for (let index = 0; index < 12; index++) {
+    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`
+    options.push({
+      key,
+      label: cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    })
+    if (key <= floor) break
+    cursor.setMonth(cursor.getMonth() - 1)
+  }
+  return options
+}
+
 function BudgetTab({ entity }: { entity: Entity | 'all' }) {
   const [variance, setVariance] = useState<VarianceResponse | null>(null)
   const [treeTotals, setTreeTotals] = useState<{ planned: number; actual: number } | null>(null)
+  const [month, setMonth] = useState<string>(currentMonthKey())
+  const [earliest, setEarliest] = useState<string | null>(null)
+  const [pace, setPace] = useState<{ daysElapsed: number; daysInMonth: number } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/overview')
+      .then(response => (response.ok ? response.json() : null))
+      .then(data => setEarliest(data?.coverage?.earliestTransaction ?? null))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     let cancelled = false
 
     async function load() {
       try {
-        const query = entity === 'all' ? '' : `&entity=${entity}`
+        const entityQuery = entity === 'all' ? '' : `&entity=${entity}`
         // Two sources, one meaning: income figures come from the variance view,
         // spending PLAN comes from the budget tree (caps + named items) so the
         // header can never disagree with the table underneath it
         const [varianceResponse, budgetResponse] = await Promise.all([
-          fetch(`/api/ledger?view=variance${query}`),
-          fetch(`/api/budget${entity === 'all' ? '' : `?entity=${entity}`}`),
+          fetch(`/api/ledger?view=variance&month=${month}${entityQuery}`),
+          fetch(`/api/budget?month=${month}${entityQuery}`),
         ])
 
         if (varianceResponse.ok) {
@@ -213,7 +246,10 @@ function BudgetTab({ entity }: { entity: Entity | 'all' }) {
         }
         if (budgetResponse.ok) {
           const tree = await budgetResponse.json()
-          if (!cancelled) setTreeTotals({ planned: tree.totalPlanned, actual: tree.totalActual })
+          if (!cancelled) {
+            setTreeTotals({ planned: tree.totalPlanned, actual: tree.totalActual })
+            setPace({ daysElapsed: tree.daysElapsed, daysInMonth: tree.daysInMonth })
+          }
         }
       } catch {
         // The tree below still renders without the summary strip
@@ -224,25 +260,48 @@ function BudgetTab({ entity }: { entity: Entity | 'all' }) {
     return () => {
       cancelled = true
     }
-  }, [entity])
+  }, [entity, month])
+
+  // While a month is running, the honest comparison is against the plan's
+  // pace to date; a full-month plan on day 2 always reads as catastrophe
+  const fraction =
+    pace !== null && pace.daysElapsed < pace.daysInMonth && pace.daysInMonth > 0
+      ? pace.daysElapsed / pace.daysInMonth
+      : 1
 
   const plannedSpend = treeTotals?.planned ?? variance?.plannedExpenses ?? 0
   const actualSpend = treeTotals?.actual ?? variance?.actualExpenses ?? 0
   const plannedSurplus = (variance?.plannedIncome ?? 0) - plannedSpend
   const actualSurplus = (variance?.actualIncome ?? 0) - actualSpend
-  const surplusDelta = actualSurplus - plannedSurplus
+  const surplusDelta = actualSurplus - plannedSurplus * fraction
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <select
+          value={month}
+          onChange={event => setMonth(event.target.value)}
+          className="text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-1.5"
+          aria-label="Budget month"
+        >
+          {monthOptions(earliest).map(option => (
+            <option key={option.key} value={option.key}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {variance?.hasActuals && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
             label="Income"
             value={variance.actualIncome}
             plan={variance.plannedIncome}
+            fraction={fraction}
             higherIsBetter
           />
-          <StatCard label="Spending" value={actualSpend} plan={plannedSpend} />
+          <StatCard label="Spending" value={actualSpend} plan={plannedSpend} fraction={fraction} />
           <Card
             className={`shadow-sm border ${
               actualSurplus >= 0 ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'
@@ -268,14 +327,14 @@ function BudgetTab({ entity }: { entity: Entity | 'all' }) {
                   <TrendingDown className="w-3.5 h-3.5" />
                 )}
                 {surplusDelta >= 0 ? '+' : ''}
-                {currency.format(surplusDelta)} vs plan
+                {currency.format(surplusDelta)} {fraction < 1 ? 'vs pace' : 'vs plan'}
               </p>
             </CardContent>
           </Card>
         </div>
       )}
 
-      <BudgetTree entity={entity} />
+      <BudgetTree entity={entity} month={month} />
     </div>
   )
 }
@@ -284,14 +343,19 @@ function StatCard({
   label,
   value,
   plan,
+  fraction = 1,
   higherIsBetter,
 }: {
   label: string
   value: number
   plan: number
+  /** Fraction of the month elapsed; < 1 compares against plan-to-date */
+  fraction?: number
   higherIsBetter?: boolean
 }) {
-  const delta = value - plan
+  const partial = fraction < 1
+  const planToDate = plan * fraction
+  const delta = value - planToDate
   const good = higherIsBetter ? delta >= 0 : delta <= 0
 
   return (
@@ -300,7 +364,7 @@ function StatCard({
         <p className="text-xs uppercase tracking-wide text-slate-500 mb-1">{label}</p>
         <p className="text-2xl font-bold text-slate-900 tabular-nums">{currency.format(value)}</p>
         <p className="text-sm text-slate-500 mt-1">
-          planned {currency.format(plan)}
+          {partial ? 'planned so far' : 'planned'} {currency.format(planToDate)}
           {plan > 0 && (
             <span className={`ml-2 font-medium ${good ? 'text-emerald-600' : 'text-red-600'}`}>
               {delta > 0 ? '+' : ''}
@@ -308,6 +372,9 @@ function StatCard({
             </span>
           )}
         </p>
+        {partial && plan > 0 && (
+          <p className="text-xs text-slate-400 mt-0.5">full month {currency.format(plan)}</p>
+        )}
       </CardContent>
     </Card>
   )

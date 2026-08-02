@@ -46,7 +46,7 @@ const currency = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 })
 
-export function BudgetTree({ entity }: { entity: Entity | 'all' }) {
+export function BudgetTree({ entity, month }: { entity: Entity | 'all'; month?: string }) {
   const [data, setData] = useState<BudgetTreeData | null>(null)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -57,8 +57,11 @@ export function BudgetTree({ entity }: { entity: Entity | 'all' }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const query = entity === 'all' ? '' : `?entity=${entity}`
-      const response = await fetch(`/api/budget${query}`)
+      const params = new URLSearchParams()
+      if (entity !== 'all') params.set('entity', entity)
+      if (month) params.set('month', month)
+      const query = params.toString()
+      const response = await fetch(`/api/budget${query ? `?${query}` : ''}`)
       const payload = await response.json()
 
       if (!response.ok) {
@@ -72,7 +75,7 @@ export function BudgetTree({ entity }: { entity: Entity | 'all' }) {
     } finally {
       setLoading(false)
     }
-  }, [entity])
+  }, [entity, month])
 
   useEffect(() => {
     load()
@@ -148,21 +151,31 @@ export function BudgetTree({ entity }: { entity: Entity | 'all' }) {
           </div>
         )}
 
-        {data && (
-          <div className="flex items-baseline gap-4 text-sm">
-            <span className="text-slate-500">
-              planned <span className="font-semibold text-slate-900 tabular-nums">{currency.format(data.totalPlanned)}</span>
-            </span>
-            <span className="text-slate-500">
-              actual <span className="font-semibold text-slate-900 tabular-nums">{currency.format(data.totalActual)}</span>
-            </span>
-            {data.hasActuals && (
-              <span className={`font-semibold tabular-nums ${data.totalVariance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                {data.totalVariance > 0 ? '+' : ''}{currency.format(data.totalVariance)}
+        {data && (() => {
+          const partial = data.daysElapsed < data.daysInMonth
+          const fraction = data.daysInMonth > 0 ? data.daysElapsed / data.daysInMonth : 1
+          const planToDate = partial ? data.totalPlanned * fraction : data.totalPlanned
+          const paceDelta = data.totalActual - planToDate
+          return (
+            <div className="flex items-baseline gap-4 text-sm">
+              <span className="text-slate-500">
+                {partial ? 'planned so far' : 'planned'}{' '}
+                <span className="font-semibold text-slate-900 tabular-nums">{currency.format(planToDate)}</span>
+                {partial && (
+                  <span className="text-slate-400"> of {currency.format(data.totalPlanned)}</span>
+                )}
               </span>
-            )}
-          </div>
-        )}
+              <span className="text-slate-500">
+                actual <span className="font-semibold text-slate-900 tabular-nums">{currency.format(data.totalActual)}</span>
+              </span>
+              {data.hasActuals && (
+                <span className={`font-semibold tabular-nums ${paceDelta > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  {paceDelta > 0 ? '+' : ''}{currency.format(paceDelta)}{partial ? ' vs pace' : ''}
+                </span>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {error && (
