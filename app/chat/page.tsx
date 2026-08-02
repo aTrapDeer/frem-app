@@ -275,11 +275,10 @@ export default function ChatPage() {
       <div className="app-surface">
         <Navbar />
 
-        <main className="pt-20 pb-4 h-screen flex flex-col">
-          <div className="max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 flex-1 flex gap-4 overflow-hidden">
+        <main className="pt-16 h-screen flex overflow-hidden">
 
             {/* History sidebar — desktop */}
-            <aside className="hidden md:flex flex-col w-64 shrink-0 py-4">
+            <aside className="hidden md:flex flex-col w-72 shrink-0 bg-white border-r border-slate-200 p-4 pt-6">
               {sidebar}
             </aside>
 
@@ -325,7 +324,7 @@ export default function ChatPage() {
               <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="py-4 flex items-center justify-between gap-3"
+                className="px-4 sm:px-8 py-3 flex items-center justify-between gap-3 border-b border-slate-200/70"
               >
                 <div className="min-w-0">
                   <h1 className="page-title text-xl sm:text-2xl flex items-center gap-2">
@@ -354,7 +353,7 @@ export default function ChatPage() {
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-4"
+                  className="max-w-3xl mx-auto w-full px-4 sm:px-6 mt-4"
                 >
                   <Card className="bg-amber-50 border-amber-200">
                     <CardContent className="p-4 flex items-start gap-3">
@@ -372,7 +371,7 @@ export default function ChatPage() {
               )}
 
               {/* Chat Messages Area */}
-              <div className="flex-1 overflow-y-auto rounded-xl app-card mb-4">
+              <div className="flex-1 overflow-y-auto">
                 {messages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center p-8">
                     <motion.div
@@ -409,7 +408,7 @@ export default function ChatPage() {
                     </motion.div>
                   </div>
                 ) : (
-                  <div className="p-4 space-y-4">
+                  <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5">
                     <AnimatePresence>
                       {messages.map((message) => (
                         <motion.div
@@ -477,6 +476,9 @@ export default function ChatPage() {
                 )}
               </div>
 
+              <div className="px-4 sm:px-6 pb-4 pt-2">
+              <div className="max-w-3xl mx-auto w-full">
+
               {/* Error Message */}
               {error && (
                 <motion.div
@@ -521,8 +523,10 @@ export default function ChatPage() {
                   Press Enter to send, Shift+Enter for new line
                 </p>
               </motion.div>
+
+              </div>
+              </div>
             </div>
-          </div>
         </main>
       </div>
     </AuthGuard>
