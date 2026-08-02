@@ -234,12 +234,11 @@ export default function CategoryWebPage({ params }: { params: Promise<{ slug: st
                     {layout.leaves.map(leaf => {
                       const isSelected = leaf.transaction.id === selectedId
                       return (
+                        <g key={leaf.transaction.id} transform={`translate(${leaf.x}, ${leaf.y})`}>
                         <motion.g
-                          key={leaf.transaction.id}
-                          initial={{ opacity: 0, scale: 0.6 }}
-                          animate={{ opacity: 1, scale: 1 }}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
                           transition={{ duration: 0.3 }}
-                          transform={`translate(${leaf.x}, ${leaf.y})`}
                           onClick={() => setSelectedId(isSelected ? null : leaf.transaction.id)}
                           className="cursor-pointer"
                         >
@@ -260,6 +259,7 @@ export default function CategoryWebPage({ params }: { params: Promise<{ slug: st
                             ${Math.round(leaf.transaction.amount)}
                           </text>
                         </motion.g>
+                        </g>
                       )
                     })}
 
