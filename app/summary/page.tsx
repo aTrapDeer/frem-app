@@ -283,7 +283,6 @@ export default function SummaryPage() {
         
         if (monthlyRes.ok) {
           const monthlyData = await monthlyRes.json()
-          console.log('Monthly projections loaded:', monthlyData)
           if (monthlyData.monthlyProjections && Array.isArray(monthlyData.monthlyProjections)) {
             setMonthlyProjections(monthlyData.monthlyProjections)
             console.log('Set monthly projections:', monthlyData.monthlyProjections.length, 'months')
@@ -474,7 +473,6 @@ export default function SummaryPage() {
                         type="button"
                         aria-label="Previous month"
                         onClick={() => {
-                          console.log('Prev button clicked!')
                           setSelectedMonthIndex(prev => Math.max(0, prev - 1))
                         }}
                         disabled={selectedMonthIndex === 0}
@@ -517,7 +515,6 @@ export default function SummaryPage() {
                         type="button"
                         aria-label="Next month"
                         onClick={() => {
-                          console.log('Next button clicked!')
                           setSelectedMonthIndex(prev => Math.min(monthlyProjections.length - 1, prev + 1))
                         }}
                         disabled={selectedMonthIndex >= monthlyProjections.length - 1}
@@ -531,7 +528,6 @@ export default function SummaryPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            console.log('Reset clicked!')
                             setSelectedMonthIndex(0)
                           }}
                           className="text-indigo-600 text-xs sm:text-sm px-2 sm:px-3 hover:underline cursor-pointer"

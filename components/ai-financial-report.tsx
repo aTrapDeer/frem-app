@@ -363,8 +363,8 @@ export function AIFinancialReport() {
   // No report yet - show generate button
   if (!report) {
     return (
-      <Card className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 border-slate-700 overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiMyMDIwMjAiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnY0em0wLTZoLTJ2LTRoMnY0em0wLTZoLTJ2LTRoMnY0em0wLTZoLTJWMTBoMnY2em0tNiA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-20"></div>
+      <Card className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 border-slate-700 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiMyMDIwMjAiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnY0em0wLTZoLTJ2LTRoMnY0em0wLTZoLTJ2LTRoMnY0em0wLTZoLTJWMTBoMnY2em0tNiA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-20"></div>
         <CardContent className="relative p-8 text-center">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -417,8 +417,8 @@ export function AIFinancialReport() {
       className="space-y-6"
     >
       {/* Header Card with Health Score */}
-      <Card className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 border-slate-700 overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiMyMDIwMjAiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnY0em0wLTZoLTJ2LTRoMnY0em0wLTZoLTJ2LTRoMnY0em0wLTZoLTJWMTBoMnY2em0tNiA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-20"></div>
+      <Card className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 border-slate-700 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiMyMDIwMjAiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnY0em0wLTZoLTJ2LTRoMnY0em0wLTZoLTJ2LTRoMnY0em0wLTZoLTJWMTBoMnY2em0tNiA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnptMCA2aC00djJoNHYtMnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-20"></div>
         <CardContent className="relative p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             {/* Health Score */}
