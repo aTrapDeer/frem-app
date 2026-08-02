@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, Check, ChevronRight, Loader2, Pencil, X } from "lucide-react"
+import Link from "next/link"
+import { AlertTriangle, Check, ChevronRight, Loader2, Pencil, Waypoints, X } from "lucide-react"
 
 type Entity = 'personal' | 'business'
 
@@ -228,6 +229,15 @@ export function BudgetTree({ entity, month }: { entity: Entity | 'all'; month?: 
                           {category.items.length} {category.items.length === 1 ? 'item' : 'items'}
                         </span>
                       </button>
+
+                      <Link
+                        href={`/web/${encodeURIComponent(category.category)}`}
+                        aria-label={`Open ${category.label} web`}
+                        title="See this category as a web of transactions"
+                        className="p-1.5 rounded-md text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 shrink-0"
+                      >
+                        <Waypoints className="w-4 h-4" />
+                      </Link>
 
                       <div className="flex items-center gap-4 shrink-0 text-sm tabular-nums">
                         {isEditing ? (
