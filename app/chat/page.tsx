@@ -7,7 +7,7 @@ import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Send, Bot, User, Loader2, Sparkles, AlertCircle, Plus, History, Trash2, X } from "lucide-react"
+import { Send, Bot, User, Loader2, Sparkles, AlertCircle, Plus, History, Trash2, X, Mic, PhoneOff } from "lucide-react"
 
 interface Message {
   id: string
@@ -54,8 +54,107 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [voiceState, setVoiceState] = useState<'off' | 'connecting' | 'live'>('off')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const peerRef = useRef<RTCPeerConnection | null>(null)
+  const micRef = useRef<MediaStream | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const endVoice = useCallback(() => {
+    peerRef.current?.close()
+    peerRef.current = null
+    micRef.current?.getTracks().forEach(track => track.stop())
+    micRef.current = null
+    if (audioRef.current) audioRef.current.srcObject = null
+    setVoiceState('off')
+  }, [])
+
+  // Never leave the mic open on unmount
+  useEffect(() => endVoice, [endVoice])
+
+  const appendVoiceMessage = useCallback((role: 'user' | 'assistant', content: string) => {
+    if (!content.trim()) return
+    setMessages(prev => [
+      ...prev,
+      { id: `voice-${Date.now()}-${role}`, role, content, timestamp: new Date() },
+    ])
+  }, [])
+
+  const startVoice = async () => {
+    if (voiceState !== 'off') return
+    setVoiceState('connecting')
+    setError(null)
+    try {
+      const sessionResponse = await fetch('/api/realtime-session', { method: 'POST' })
+      const sessionData = await sessionResponse.json()
+      if (!sessionResponse.ok || !sessionData.clientSecret) {
+        setError(sessionData.error ?? 'Could not start a voice session.')
+        setVoiceState('off')
+        return
+      }
+
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+      micRef.current = mic
+
+      const peer = new RTCPeerConnection()
+      peerRef.current = peer
+      mic.getTracks().forEach(track => peer.addTrack(track, mic))
+      peer.ontrack = event => {
+        if (audioRef.current) {
+          audioRef.current.srcObject = event.streams[0]
+          void audioRef.current.play().catch(() => {})
+        }
+      }
+
+      // Transcripts arrive on the event channel; they become chat messages so
+      // the spoken conversation is readable afterward
+      const channel = peer.createDataChannel('oai-events')
+      channel.onmessage = event => {
+        try {
+          const payload = JSON.parse(event.data)
+          if (payload.type === 'conversation.item.input_audio_transcription.completed') {
+            appendVoiceMessage('user', payload.transcript ?? '')
+          }
+          if (
+            payload.type === 'response.output_audio_transcript.done' ||
+            payload.type === 'response.audio_transcript.done'
+          ) {
+            appendVoiceMessage('assistant', payload.transcript ?? '')
+          }
+        } catch {
+          // Non-JSON frames are fine to ignore
+        }
+      }
+
+      const offer = await peer.createOffer()
+      await peer.setLocalDescription(offer)
+
+      const answerResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${sessionData.clientSecret}`,
+          'Content-Type': 'application/sdp',
+        },
+        body: offer.sdp,
+      })
+      if (!answerResponse.ok) throw new Error(`SDP exchange failed (${answerResponse.status})`)
+      await peer.setRemoteDescription({ type: 'answer', sdp: await answerResponse.text() })
+
+      peer.onconnectionstatechange = () => {
+        if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) endVoice()
+      }
+      setVoiceState('live')
+    } catch (err) {
+      console.error('Voice session error:', err)
+      setError(
+        err instanceof DOMException && err.name === 'NotAllowedError'
+          ? 'Microphone access was denied — allow it to talk to your coach.'
+          : 'Could not start a voice session. Please try again.'
+      )
+      endVoice()
+    }
+  }
 
   const loadConversations = useCallback(async () => {
     try {
@@ -496,7 +595,41 @@ export default function ChatPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white rounded-xl border border-slate-200 shadow-sm p-2"
               >
+                {voiceState !== 'off' && (
+                  <div className="flex items-center justify-between gap-3 px-3 py-2 mb-2 rounded-lg bg-indigo-50 border border-indigo-200">
+                    <span className="flex items-center gap-2 text-sm text-indigo-700 font-medium">
+                      <span className={`w-2 h-2 rounded-full ${voiceState === 'live' ? 'bg-red-500 animate-pulse' : 'bg-amber-400'}`} />
+                      {voiceState === 'live' ? 'Voice on — just talk. Transcripts land here.' : 'Connecting…'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={endVoice}
+                      className="flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-700"
+                    >
+                      <PhoneOff className="h-3.5 w-3.5" />
+                      End
+                    </button>
+                  </div>
+                )}
+                <audio ref={audioRef} className="hidden" />
                 <div className="flex gap-2 items-end">
+                  <Button
+                    onClick={voiceState === 'off' ? startVoice : endVoice}
+                    variant="outline"
+                    aria-label={voiceState === 'off' ? 'Start voice chat' : 'End voice chat'}
+                    title={voiceState === 'off' ? 'Talk to your coach' : 'End voice chat'}
+                    className={`rounded-lg px-3 bg-white ${
+                      voiceState === 'live'
+                        ? 'border-red-300 text-red-600 hover:bg-red-50'
+                        : 'text-slate-600'
+                    }`}
+                  >
+                    {voiceState === 'connecting' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </Button>
                   <textarea
                     ref={inputRef}
                     value={input}
