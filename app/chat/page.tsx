@@ -1,19 +1,27 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import ReactMarkdown from "react-markdown"
 import { Navbar } from "@/components/navbar"
 import { AuthGuard } from "@/components/auth-guard"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Send, Bot, User, Loader2, Sparkles, RefreshCw, AlertCircle } from "lucide-react"
+import { Send, Bot, User, Loader2, Sparkles, AlertCircle, Plus, History, Trash2, X } from "lucide-react"
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+}
+
+interface Conversation {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messageCount: number
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -25,16 +33,43 @@ const SUGGESTED_QUESTIONS = [
   "Should I focus on savings or paying debt first?",
 ]
 
+function relativeTime(iso: string): string {
+  const then = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`).getTime()
+  const minutes = Math.round((Date.now() - then) / 60000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.round(hours / 24)
+  if (days < 30) return `${days}d ago`
+  return new Date(then).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasReport, setHasReport] = useState<boolean | null>(null)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Check if user has a financial report
+  const loadConversations = useCallback(async () => {
+    try {
+      const response = await fetch('/api/chat-conversations')
+      if (response.ok) {
+        const data = await response.json()
+        setConversations(data.conversations ?? [])
+      }
+    } catch {
+      // History is an extra — chat works without it
+    }
+  }, [])
+
+  // Check if user has a financial report + load history
   useEffect(() => {
     async function checkReport() {
       try {
@@ -46,7 +81,8 @@ export default function ChatPage() {
       }
     }
     checkReport()
-  }, [])
+    loadConversations()
+  }, [loadConversations])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -102,7 +138,8 @@ export default function ChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
-          conversationHistory: messages.map(m => ({ role: m.role, content: m.content }))
+          conversationHistory: messages.map(m => ({ role: m.role, content: m.content })),
+          conversationId: activeId ?? undefined,
         })
       })
 
@@ -121,12 +158,57 @@ export default function ChatPage() {
       }
 
       setMessages(prev => [...prev, assistantMessage])
+      if (typeof data.conversationId === 'string') {
+        setActiveId(data.conversationId)
+      }
+      void loadConversations()
     } catch (err) {
       console.error('Chat error:', err)
       setError('Failed to send message. Please try again.')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const openConversation = async (id: string) => {
+    if (id === activeId || isLoading) return
+    try {
+      const response = await fetch(`/api/chat-conversations/${id}`)
+      if (!response.ok) return
+      const data = await response.json()
+      setMessages(
+        (data.messages ?? []).map((m: { id: string; role: 'user' | 'assistant'; content: string; createdAt: string }) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: new Date(m.createdAt.endsWith('Z') || m.createdAt.includes('+') ? m.createdAt : `${m.createdAt}Z`),
+        }))
+      )
+      setActiveId(id)
+      setError(null)
+      setHistoryOpen(false)
+    } catch {
+      setError('Could not load that conversation.')
+    }
+  }
+
+  const deleteConversation = async (id: string) => {
+    try {
+      const response = await fetch(`/api/chat-conversations/${id}`, { method: 'DELETE' })
+      if (response.ok) {
+        setConversations(prev => prev.filter(c => c.id !== id))
+        if (id === activeId) startNewChat()
+      }
+    } catch {
+      // List simply keeps the row
+    }
+  }
+
+  const startNewChat = () => {
+    setMessages([])
+    setActiveId(null)
+    setError(null)
+    setHistoryOpen(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -136,223 +218,313 @@ export default function ChatPage() {
     }
   }
 
-  const clearChat = () => {
-    setMessages([])
-    setError(null)
-  }
+  const sidebar = (
+    <div className="flex flex-col h-full">
+      <Button
+        onClick={startNewChat}
+        variant="outline"
+        className="w-full justify-start gap-2 text-slate-700 mb-3 bg-white"
+      >
+        <Plus className="h-4 w-4" />
+        New chat
+      </Button>
+      <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-1">
+        {conversations.length === 0 ? (
+          <p className="text-xs text-slate-400 px-2 pt-2">
+            Past conversations will show up here.
+          </p>
+        ) : (
+          conversations.map(conversation => (
+            <div
+              key={conversation.id}
+              className={`group flex items-center gap-1 rounded-lg ${
+                conversation.id === activeId ? 'bg-indigo-50' : 'hover:bg-slate-100'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => openConversation(conversation.id)}
+                className="flex-1 min-w-0 text-left px-2.5 py-2"
+              >
+                <span className={`block text-sm truncate ${
+                  conversation.id === activeId ? 'text-indigo-700 font-medium' : 'text-slate-700'
+                }`}>
+                  {conversation.title}
+                </span>
+                <span className="block text-[11px] text-slate-400">
+                  {relativeTime(conversation.updatedAt)}
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-label="Delete conversation"
+                onClick={() => deleteConversation(conversation.id)}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 mr-1 rounded text-slate-400 hover:text-red-600 shrink-0"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="app-surface">
         <Navbar />
-        
+
         <main className="pt-20 pb-4 h-screen flex flex-col">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 flex flex-col overflow-hidden">
-            
-            {/* Header */}
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }} 
-              animate={{ opacity: 1, y: 0 }}
-              className="py-4 flex items-center justify-between"
-            >
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                  <Sparkles className="h-6 w-6 text-indigo-500" />
-                  Financial Advisor Chat
-                </h1>
-                <p className="text-sm text-slate-600">Ask me anything about your finances</p>
-              </div>
-              {messages.length > 0 && (
+          <div className="max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 flex-1 flex gap-4 overflow-hidden">
+
+            {/* History sidebar — desktop */}
+            <aside className="hidden md:flex flex-col w-64 shrink-0 py-4">
+              {sidebar}
+            </aside>
+
+            {/* History slide-over — mobile */}
+            <AnimatePresence>
+              {historyOpen && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setHistoryOpen(false)}
+                    className="md:hidden fixed inset-0 bg-slate-900/30 z-40"
+                  />
+                  <motion.div
+                    initial={{ x: -280 }}
+                    animate={{ x: 0 }}
+                    exit={{ x: -280 }}
+                    transition={{ type: 'tween', duration: 0.2 }}
+                    className="md:hidden fixed left-0 top-0 bottom-0 w-72 bg-white z-50 p-4 pt-6 shadow-xl"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-semibold text-slate-900">Chat history</span>
+                      <button
+                        type="button"
+                        aria-label="Close history"
+                        onClick={() => setHistoryOpen(false)}
+                        className="p-1 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="h-[calc(100%-2.5rem)]">{sidebar}</div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+
+            {/* Chat column */}
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+
+              {/* Header */}
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="py-4 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <h1 className="page-title text-xl sm:text-2xl flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-indigo-500 shrink-0" />
+                    <span className="truncate">
+                      {activeId
+                        ? conversations.find(c => c.id === activeId)?.title ?? 'Coach'
+                        : 'Coach'}
+                    </span>
+                  </h1>
+                  <p className="text-sm text-slate-500">Grounded in your real numbers.</p>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={clearChat}
-                  className="text-slate-600"
+                  onClick={() => setHistoryOpen(true)}
+                  className="md:hidden text-slate-600 shrink-0 bg-white"
                 >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  New Chat
+                  <History className="h-4 w-4 mr-1" />
+                  History
                 </Button>
-              )}
-            </motion.div>
-
-            {/* No Report Warning */}
-            {hasReport === false && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4"
-              >
-                <Card className="bg-amber-50 border-amber-200">
-                  <CardContent className="p-4 flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                    <div>
-                      <p className="text-amber-800 font-medium">Generate a Financial Report First</p>
-                      <p className="text-amber-700 text-sm">
-                        For the best experience, generate a financial report on the Summary page. 
-                        This helps the AI understand your complete financial picture.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
               </motion.div>
-            )}
 
-            {/* Chat Messages Area */}
-            <div className="flex-1 overflow-y-auto rounded-xl bg-white/50 backdrop-blur-sm border border-slate-200 shadow-sm mb-4">
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center p-8">
-                  <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="text-center"
-                  >
-                    <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-                      <Bot className="h-8 w-8 text-white" />
-                    </div>
-                    <h2 className="text-xl font-semibold text-slate-800 mb-2">
-                      Hi! I&apos;m your Financial Advisor
-                    </h2>
-                    <p className="text-slate-600 mb-6 max-w-md">
-                      I have access to your income, expenses, goals, and accounts. 
-                      Ask me anything about your financial situation!
-                    </p>
-                    
-                    {/* Suggested Questions */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg mx-auto">
-                      {SUGGESTED_QUESTIONS.map((question, index) => (
-                        <motion.button
-                          key={question}
+              {/* No Report Warning */}
+              {hasReport === false && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-4"
+                >
+                  <Card className="bg-amber-50 border-amber-200">
+                    <CardContent className="p-4 flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                      <div>
+                        <p className="text-amber-800 font-medium">Generate a Financial Report First</p>
+                        <p className="text-amber-700 text-sm">
+                          For the best experience, generate a financial report on the Summary page.
+                          This helps the AI understand your complete financial picture.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Chat Messages Area */}
+              <div className="flex-1 overflow-y-auto rounded-xl app-card mb-4">
+                {messages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center p-8">
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="text-center"
+                    >
+                      <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <Bot className="h-8 w-8 text-white" />
+                      </div>
+                      <h2 className="text-xl font-semibold text-slate-800 mb-2">
+                        Hi! I&apos;m your Financial Advisor
+                      </h2>
+                      <p className="text-slate-600 mb-6 max-w-md">
+                        I have access to your income, expenses, goals, and accounts.
+                        Ask me anything about your financial situation!
+                      </p>
+
+                      {/* Suggested Questions */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg mx-auto">
+                        {SUGGESTED_QUESTIONS.map((question, index) => (
+                          <motion.button
+                            key={question}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            onClick={() => sendMessage(question)}
+                            className="text-left p-3 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors text-sm text-slate-700"
+                          >
+                            {question}
+                          </motion.button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  </div>
+                ) : (
+                  <div className="p-4 space-y-4">
+                    <AnimatePresence>
+                      {messages.map((message) => (
+                        <motion.div
+                          key={message.id}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          onClick={() => sendMessage(question)}
-                          className="text-left p-3 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors text-sm text-slate-700"
+                          exit={{ opacity: 0 }}
+                          className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
-                          {question}
-                        </motion.button>
+                          <div className={`flex gap-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              message.role === 'user' ? 'bg-indigo-600' : 'bg-slate-900'
+                            }`}>
+                              {message.role === 'user'
+                                ? <User className="h-4 w-4 text-white" />
+                                : <Bot className="h-4 w-4 text-white" />
+                              }
+                            </div>
+                            <div className={`rounded-2xl px-4 py-3 ${
+                              message.role === 'user'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-white border border-slate-200 text-slate-800'
+                            }`}>
+                              <div className={`prose-chat ${
+                                message.role === 'user' ? 'prose-chat-user text-white' : 'text-slate-800'
+                              }`}>
+                                <ReactMarkdown>
+                                  {message.content}
+                                </ReactMarkdown>
+                              </div>
+                              <div className={`text-xs mt-2 ${
+                                message.role === 'user' ? 'text-indigo-200' : 'text-slate-400'
+                              }`}>
+                                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
                       ))}
-                    </div>
-                  </motion.div>
-                </div>
-              ) : (
-                <div className="p-4 space-y-4">
-                  <AnimatePresence>
-                    {messages.map((message) => (
+                    </AnimatePresence>
+
+                    {/* Loading indicator */}
+                    {isLoading && (
                       <motion.div
-                        key={message.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        className="flex justify-start"
                       >
-                        <div className={`flex gap-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            message.role === 'user' 
-                              ? 'bg-indigo-600' 
-                              : 'bg-gradient-to-br from-indigo-500 to-purple-600'
-                          }`}>
-                            {message.role === 'user' 
-                              ? <User className="h-4 w-4 text-white" />
-                              : <Bot className="h-4 w-4 text-white" />
-                            }
+                        <div className="flex gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
+                            <Bot className="h-4 w-4 text-white" />
                           </div>
-                          <div className={`rounded-2xl px-4 py-3 ${
-                            message.role === 'user'
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-white border border-slate-200 text-slate-800'
-                          }`}>
-                            <div className={`prose-chat ${
-                              message.role === 'user' ? 'prose-chat-user text-white' : 'text-slate-800'
-                            }`}>
-                              <ReactMarkdown>
-                                {message.content}
-                              </ReactMarkdown>
-                            </div>
-                            <div className={`text-xs mt-2 ${
-                              message.role === 'user' ? 'text-indigo-200' : 'text-slate-400'
-                            }`}>
-                              {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3">
+                            <div className="flex items-center gap-2 text-slate-600">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span className="text-sm">Thinking...</span>
                             </div>
                           </div>
                         </div>
                       </motion.div>
-                    ))}
-                  </AnimatePresence>
-                  
-                  {/* Loading indicator */}
-                  {isLoading && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex justify-start"
-                    >
-                      <div className="flex gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                          <Bot className="h-4 w-4 text-white" />
-                        </div>
-                        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3">
-                          <div className="flex items-center gap-2 text-slate-600">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">Thinking...</span>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                  
-                  <div ref={messagesEndRef} />
-                </div>
-              )}
-            </div>
+                    )}
 
-            {/* Error Message */}
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-              >
-                {error}
-              </motion.div>
-            )}
-
-            {/* Input Area */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-xl border border-slate-200 shadow-sm p-2"
-            >
-              <div className="flex gap-2 items-end">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask about your finances..."
-                  rows={1}
-                  className="flex-1 resize-none border-0 bg-transparent p-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0 text-sm"
-                  disabled={isLoading}
-                />
-                <Button
-                  onClick={() => sendMessage()}
-                  disabled={!input.trim() || isLoading}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-slate-400 px-2 pt-1">
-                Press Enter to send, Shift+Enter for new line
-              </p>
-            </motion.div>
+
+              {/* Error Message */}
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+                >
+                  {error}
+                </motion.div>
+              )}
+
+              {/* Input Area */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-xl border border-slate-200 shadow-sm p-2"
+              >
+                <div className="flex gap-2 items-end">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask about your finances..."
+                    rows={1}
+                    className="flex-1 resize-none border-0 bg-transparent p-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0 text-sm"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    onClick={() => sendMessage()}
+                    disabled={!input.trim() || isLoading}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-400 px-2 pt-1">
+                  Press Enter to send, Shift+Enter for new line
+                </p>
+              </motion.div>
+            </div>
           </div>
         </main>
       </div>
     </AuthGuard>
   )
 }
-

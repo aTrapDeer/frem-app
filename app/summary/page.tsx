@@ -73,10 +73,14 @@ interface EntityView {
   surplus: { value: number; basis: 'measured' | 'plan'; monthsOfData: number }
 }
 
+type OverviewRange = '1w' | '1m' | '2m' | '3m' | '6m' | '1y'
+
 interface FinancialOverview {
   netWorth: { net: number; accountCount: number }
   entities: { personal: EntityView; business: EntityView | null }
   hasBankData: boolean
+  coverage?: { earliestTransaction: string | null; availableRanges: OverviewRange[] }
+  window?: { range: OverviewRange; days: number; start: string; end: string; label: string }
 }
 
 interface MonthlyGoalProjection {
@@ -138,12 +142,58 @@ interface SideProject {
   description?: string
 }
 
-function BasisChip({ basis, monthsOfData }: { basis: 'measured' | 'plan'; monthsOfData: number }) {
+function BasisChip({ basis, monthsOfData, windowLabel }: { basis: 'measured' | 'plan'; monthsOfData: number; windowLabel?: string }) {
   if (basis === 'measured') {
-    return <span className="text-[10px] font-semibold uppercase tracking-wide bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">measured · {monthsOfData} mo</span>
+    return <span className="text-[10px] font-semibold uppercase tracking-wide bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">measured · {windowLabel ?? `${monthsOfData} mo`}</span>
   }
 
   return <span className="text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">planned</span>
+}
+
+const RANGE_OPTIONS: Array<{ key: OverviewRange; label: string }> = [
+  { key: '1w', label: '1W' },
+  { key: '1m', label: '1M' },
+  { key: '2m', label: '2M' },
+  { key: '3m', label: '3M' },
+  { key: '6m', label: '6M' },
+  { key: '1y', label: '1Y' },
+]
+
+function RangePills({
+  selected,
+  available,
+  onSelect,
+}: {
+  selected: OverviewRange
+  available: OverviewRange[]
+  onSelect: (range: OverviewRange) => void
+}) {
+  return (
+    <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-lg p-1">
+      {RANGE_OPTIONS.map(option => {
+        const enabled = available.includes(option.key)
+        const active = selected === option.key
+        return (
+          <button
+            key={option.key}
+            type="button"
+            disabled={!enabled}
+            title={enabled ? undefined : "Sorry — we don't have transaction data for this full period yet"}
+            onClick={() => onSelect(option.key)}
+            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+              active
+                ? 'bg-indigo-600 text-white'
+                : enabled
+                  ? 'text-slate-600 hover:bg-slate-100'
+                  : 'text-slate-300 cursor-not-allowed'
+            }`}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 export default function SummaryPage() {
@@ -171,10 +221,21 @@ export default function SummaryPage() {
   } | null>(null)
   const [projections, setProjections] = useState<ProjectionSummary | null>(null)
   const [overview, setOverview] = useState<FinancialOverview | null>(null)
+  const [selectedRange, setSelectedRange] = useState<OverviewRange>('3m')
   const [monthlyProjections, setMonthlyProjections] = useState<MonthlyProjection[]>([])
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0)
   const timelineRef = useRef<HTMLDivElement>(null)
   const isTimelineInView = useInView(timelineRef, { once: true, margin: "-100px" })
+
+  const handleRangeSelect = async (range: OverviewRange) => {
+    setSelectedRange(range)
+    try {
+      const response = await fetch(`/api/overview?range=${range}`)
+      if (response.ok) setOverview(await response.json() as FinancialOverview)
+    } catch {
+      // Keep showing the current window on failure
+    }
+  }
 
   // Fetch user's actual milestones and financial data from API
   useEffect(() => {
@@ -371,6 +432,15 @@ export default function SummaryPage() {
             <PageHeader
               title="Summary"
               subtitle="The whole picture — measured where we have transactions, planned where we don't."
+              actions={
+                overview?.coverage && overview.coverage.availableRanges.length > 0 ? (
+                  <RangePills
+                    selected={selectedRange}
+                    available={overview.coverage.availableRanges}
+                    onSelect={handleRangeSelect}
+                  />
+                ) : undefined
+              }
             />
           </motion.div>
 
@@ -504,7 +574,7 @@ export default function SummaryPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
             >
-              <Card className="glass-card card-lift">
+              <Card className="glass-card card-lift h-full">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-slate-600">
                     Savings Rate <span className="text-xs font-normal text-slate-400">· personal</span> {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
@@ -517,12 +587,12 @@ export default function SummaryPage() {
                     {personalOverview && (
                       <BasisChip
                         basis={hasMeasuredSavingsRate ? 'measured' : 'plan'}
-                        monthsOfData={personalOverview.surplus.monthsOfData}
+                        monthsOfData={personalOverview.surplus.monthsOfData} windowLabel={overview?.window?.label}
                       />
                     )}
                   </div>
                   <p className="text-xs text-slate-600 flex items-center mt-1">
-                    {kpis.savingsRate >= 20 ? '🎉 Great!' : kpis.savingsRate >= 10 ? '👍 Good' : kpis.savingsRate >= 0 ? '⚠️ Low' : '🚨 Deficit'} of income saved
+                    {kpis.savingsRate >= 20 ? 'Strong share of income saved' : kpis.savingsRate >= 10 ? 'Good share of income saved' : kpis.savingsRate >= 0 ? 'Low share of income saved' : 'Spending exceeds income'}
                   </p>
                 </CardContent>
               </Card>
@@ -534,7 +604,7 @@ export default function SummaryPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.1 }}
             >
-              <Card className="glass-card card-lift">
+              <Card className="glass-card card-lift h-full">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-slate-600">
                     Goal Progress {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
@@ -559,7 +629,7 @@ export default function SummaryPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
             >
-              <Card className="glass-card card-lift">
+              <Card className="glass-card card-lift h-full">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-slate-600">
                     Monthly Surplus <span className="text-xs font-normal text-slate-400">· personal</span> {selectedMonth && selectedMonthIndex > 0 && <span className="text-xs text-indigo-500">({selectedMonth.monthLabel})</span>}
@@ -570,7 +640,7 @@ export default function SummaryPage() {
                   <div className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold font-numbers ${kpis.monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     <span>{kpis.monthlySurplus >= 0 ? '+' : ''}${Math.abs(Math.round(kpis.monthlySurplus)).toLocaleString()}</span>
                     {personalOverview && (
-                      <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} />
+                      <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} windowLabel={overview?.window?.label} />
                     )}
                   </div>
                   {personalOverview?.surplus.basis === 'measured' && (
@@ -598,7 +668,7 @@ export default function SummaryPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
               >
-                <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                <Card className="app-card card-lift-sm h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-slate-600">Monthly Income <span className="text-xs font-normal text-slate-400">· personal</span></CardTitle>
                     <DollarSign className="h-4 w-4 text-green-600" />
@@ -609,7 +679,7 @@ export default function SummaryPage() {
                       {personalOverview && (
                         <BasisChip
                           basis={personalOverview.income.measured !== null ? 'measured' : 'plan'}
-                          monthsOfData={personalOverview.surplus.monthsOfData}
+                          monthsOfData={personalOverview.surplus.monthsOfData} windowLabel={overview?.window?.label}
                         />
                       )}
                     </div>
@@ -628,7 +698,7 @@ export default function SummaryPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.5 }}
               >
-                <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                <Card className="app-card card-lift-sm h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-slate-600">Monthly Obligations</CardTitle>
                     <CreditCard className="h-4 w-4 text-red-600" />
@@ -647,7 +717,7 @@ export default function SummaryPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.6 }}
               >
-                <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                <Card className="app-card card-lift-sm h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-slate-600">{personalOverview ? <>Monthly Surplus <span className="text-xs font-normal text-slate-400">· personal</span></> : `Monthly ${kpis.surplus >= 0 ? 'Surplus' : 'Deficit'}`}</CardTitle>
                     {kpis.surplus >= 0 ? <TrendingUp className="h-4 w-4 text-green-600" /> : <TrendingDown className="h-4 w-4 text-red-600" />}
@@ -656,7 +726,7 @@ export default function SummaryPage() {
                     <div className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold font-numbers ${kpis.surplus >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       <span>{kpis.surplus >= 0 ? '+' : ''}${Math.abs(Math.round(kpis.surplus)).toLocaleString()}</span>
                       {personalOverview && (
-                        <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} />
+                        <BasisChip basis={personalOverview.surplus.basis} monthsOfData={personalOverview.surplus.monthsOfData} windowLabel={overview?.window?.label} />
                       )}
                     </div>
                     {personalOverview?.surplus.basis === 'measured' && (
@@ -678,7 +748,7 @@ export default function SummaryPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.7 }}
               >
-                <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                <Card className="app-card card-lift-sm h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-slate-600">Daily Target</CardTitle>
                     <Target className="h-4 w-4 text-indigo-600" />
@@ -698,7 +768,7 @@ export default function SummaryPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.8 }}
                 >
-                  <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                  <Card className="app-card card-lift-sm h-full">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium text-slate-600">Net (linked accounts)</CardTitle>
                       <CreditCard className="h-4 w-4 text-slate-600" />
@@ -735,7 +805,7 @@ export default function SummaryPage() {
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
                         Personal
                         {personalOverview?.surplus.basis === 'measured' && (
-                          <BasisChip basis="measured" monthsOfData={personalOverview.surplus.monthsOfData} />
+                          <BasisChip basis="measured" monthsOfData={personalOverview.surplus.monthsOfData} windowLabel={overview?.window?.label} />
                         )}
                       </h4>
                       <div className="space-y-2 text-sm tabular-nums">
@@ -765,7 +835,7 @@ export default function SummaryPage() {
                           <h4 className="text-xs font-semibold uppercase tracking-wide text-purple-600 mb-3 flex items-center gap-2">
                             Business
                             {overview.entities.business.surplus.basis === 'measured' && (
-                              <BasisChip basis="measured" monthsOfData={overview.entities.business.surplus.monthsOfData} />
+                              <BasisChip basis="measured" monthsOfData={overview.entities.business.surplus.monthsOfData} windowLabel={overview.window?.label} />
                             )}
                           </h4>
                           <div className="space-y-2 text-sm tabular-nums">
@@ -1299,7 +1369,7 @@ export default function SummaryPage() {
                       animate={{ opacity: isTimelineInView ? 1 : 0, x: isTimelineInView ? 0 : -20 }}
                       transition={{ duration: 0.6, delay: index * 0.1 }}
                     >
-                      <Card className="glass-card card-lift">
+                      <Card className="glass-card card-lift h-full">
                         <CardContent className="p-6">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex-1">
